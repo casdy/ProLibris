@@ -29,3 +29,9 @@ coverage
 
 *.tsbuildinfo
 .env
+.env.local
+.env.*.local
+
+# Development Scripts
+scripts/seed.ts
+scripts/migrate-schema.ts
