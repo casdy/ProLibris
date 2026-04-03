@@ -1,19 +1,32 @@
 import { defineStore } from 'pinia'
 
+/**
+ * Safely read the initial theme preference.
+ * Returns true (dark) as the default if browser APIs are unavailable.
+ */
+function resolveInitialDark(): boolean {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return true
+  const stored = localStorage.getItem('theme')
+  if (stored) return stored === 'dark'
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? true
+}
+
 export const useUIStore = defineStore('ui', {
   state: () => ({
-    isDark: localStorage.getItem('theme') === 'dark' || 
-            (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches),
+    isDark: resolveInitialDark(),
     isInitialized: false,
     notifications: [] as Array<{ id: string; message: string; type: 'info' | 'success' | 'error'; duration?: number }>
   }),
   actions: {
     toggleTheme() {
       this.isDark = !this.isDark
-      localStorage.setItem('theme', this.isDark ? 'dark' : 'light')
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('theme', this.isDark ? 'dark' : 'light')
+      }
       this.applyTheme()
     },
     applyTheme() {
+      if (typeof document === 'undefined') return
       if (this.isDark) {
         document.documentElement.classList.add('dark')
       } else {

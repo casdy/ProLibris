@@ -14,14 +14,14 @@ export const useAuthStore = defineStore('auth', {
     async refreshUser() {
       try {
         this.user = await account.get()
-      } catch (err) {
+      } catch {
         this.user = null
       }
     },
     async init() {
       try {
         this.user = await account.get()
-      } catch (err) {
+      } catch {
         this.user = null
       } finally {
         this.loading = false
@@ -39,8 +39,10 @@ export const useAuthStore = defineStore('auth', {
       await account.deleteSession('current')
       this.user = null
     },
-    async sendVerification() {
-      const url = `${window.location.origin}/verify-complete`
+    async sendVerification(origin?: string) {
+      const resolvedOrigin = origin
+        ?? (typeof window !== 'undefined' ? window.location.origin : '')
+      const url = `${resolvedOrigin}/verify-complete`
       await account.createVerification(url)
     }
   },

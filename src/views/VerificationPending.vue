@@ -17,8 +17,8 @@ const sendVerification = async () => {
   try {
     await auth.sendVerification()
     success.value = true
-  } catch (err: any) {
-    error.value = err.message || 'Failed to send verification parchment.'
+  } catch (err: unknown) {
+    error.value = err instanceof Error ? err.message : 'Failed to send verification parchment.'
   } finally {
     sending.value = false
   }

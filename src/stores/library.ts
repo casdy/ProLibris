@@ -65,7 +65,7 @@ export const useLibraryStore = defineStore('library', {
     // UI state for filtering/sorting
     enchantedFilter: { genre: '', sort: 'title' },
     discoverFilter: { genre: '', sort: 'title' },
-    activeSummons: new Set<number>()
+    activeSummons: {} as Record<number, boolean>
   }),
   getters: {
     books(state) {
@@ -134,7 +134,7 @@ export const useLibraryStore = defineStore('library', {
             Query.limit(limit),
             Query.offset(offset),
           ])
-          allDocs = [...allDocs, ...response.documents]
+          allDocs.push(...response.documents)
           offset += limit
           hasMore = response.documents.length === limit
         }
@@ -222,12 +222,12 @@ export const useLibraryStore = defineStore('library', {
       if (!auth.user) return
 
       const session = this.sessions.find(s => s.book_id === bookId)
-    const data: Record<string, unknown> = {
-      progress_cfi: cfi,
-      last_read_at: new Date().toISOString(),
-      status: 'reading',
-      pages_turned: (session?.pages_turned || 0) + pagesInc,
-    }
+      const data: Record<string, unknown> = {
+        progress_cfi: cfi,
+        last_read_at: new Date().toISOString(),
+        status: 'reading',
+        pages_turned: (session?.pages_turned || 0) + pagesInc,
+      }
 
       // Merge analytics data if provided
       if (analyticsData) {
@@ -270,13 +270,13 @@ export const useLibraryStore = defineStore('library', {
       const { useUIStore } = await import('./ui')
       const ui = useUIStore()
       
-      if (this.activeSummons.has(gutenbergId)) {
+      if (this.activeSummons[gutenbergId]) {
         ui.showNotification(`Already summoning "${metadata.title}"`, 'info')
         return
       }
 
       const notificationId = ui.showNotification(`Summoning "${metadata.title}" into your archive...`, 'info', 0)
-      this.activeSummons.add(gutenbergId)
+      this.activeSummons[gutenbergId] = true
 
       try {
         const book = await this.importBookFromGutenberg(gutenbergId, metadata)
@@ -291,7 +291,7 @@ export const useLibraryStore = defineStore('library', {
         ui.removeNotification(notificationId)
         ui.showNotification(`Failed to summon "${metadata.title}". Checking parchment for errors...`, 'error')
       } finally {
-        this.activeSummons.delete(gutenbergId)
+        delete this.activeSummons[gutenbergId]
       }
     },
 

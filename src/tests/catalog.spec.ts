@@ -20,57 +20,39 @@ vi.mock('@/lib/appwrite', () => ({
 describe('useBookCatalog Hybrid Logic', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    localStorage.clear()
-    vi.stubGlobal('fetch', vi.fn())
+    if (typeof localStorage !== 'undefined') localStorage.clear()
   })
 
-  it('fetchBooks correctly merges Gutendex and Appwrite data', async () => {
-    // Mock Appwrite response
+  it('fetchBooks correctly returns local Appwrite books', async () => {
     const mockAppwrite = {
-      documents: [{ $id: '1', gutenberg_id: 100, title: 'Local Book', author: 'A1', subjects: [], file_id: 'f1', cover_url: '' }],
-      total: 1
-    };
+      documents: [
+        { $id: '1', gutenberg_id: 100, title: 'Book A', author: 'A1', subjects: ['Fiction'], file_id: 'f1', cover_url: '' },
+        { $id: '2', gutenberg_id: 200, title: 'Book B', author: 'A2', subjects: ['Science'], file_id: 'f2', cover_url: '' },
+      ],
+      total: 2
+    }
     // @ts-expect-error Mocking Appwrite
     databases.listDocuments.mockResolvedValue(mockAppwrite)
 
-    // Mock Gutendex response
-    const mockGutendex = {
-      results: [
-        { id: 100, title: 'Local Book (Duplicate)', authors: [{ name: 'A1' }], subjects: [], formats: {} },
-        { id: 200, title: 'Remote Book', authors: [{ name: 'A2' }], subjects: [], formats: {} }
-      ],
-      count: 2
-    };
-    // @ts-expect-error Mocking Fetch
-    global.fetch.mockResolvedValue({
-      ok: true,
-      json: async () => mockGutendex
-    })
-
     const catalog = useBookCatalog()
-    await catalog.fetchBooks()
+    await catalog.fetchBooks(true) // forceRefresh to bypass cache
 
     expect(catalog.books.value).toHaveLength(2)
     expect(catalog.books.value[0].isLocal).toBe(true)
-    expect(catalog.books.value[1].isLocal).toBe(false)
+    expect(catalog.books.value[1].isLocal).toBe(true)
     expect(catalog.books.value[0].id).toBe(100)
     expect(catalog.books.value[1].id).toBe(200)
   })
 
-  it('calculates totalPages correctly from merged count', async () => {
+  it('calculates totalPages correctly from Appwrite count', async () => {
     // @ts-expect-error Mocking
-    databases.listDocuments.mockResolvedValue({ documents: [], total: 32 });
-    // @ts-expect-error Mocking
-    global.fetch.mockResolvedValue({
-      ok: true,
-      json: async () => ({ results: [], count: 64 })
-    })
+    databases.listDocuments.mockResolvedValue({ documents: [], total: 64 })
 
     const catalog = useBookCatalog()
-    await catalog.fetchBooks()
+    await catalog.fetchBooks(true)
 
-    // Assuming 32 items per page as per composable logic
-    expect(catalog.totalPages.value).toBe(2) // Max of ceil(32/32) and ceil(64/32)
+    // 64 items / 32 per page = 2 pages
+    expect(catalog.totalPages.value).toBe(2)
   })
 
   it('resets currentPage to 1 when filters are updated', () => {

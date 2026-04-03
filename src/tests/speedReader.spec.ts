@@ -4,20 +4,15 @@ import SpeedReadEngine from '@/components/reader/SpeedReadEngine.vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { useReaderStore } from '@/stores/reader'
 
-// Mock Lucide icons
-vi.mock('lucide-vue-next', () => ({
-  Play: { render: () => 'Play' },
-  Pause: { render: () => 'Pause' },
-  SkipBack: { render: () => 'SkipBack' },
-  SkipForward: { render: () => 'SkipForward' },
-  RotateCcw: { render: () => 'RotateCcw' },
-  Minus: { render: () => 'Minus' },
-  Plus: { render: () => 'Plus' },
-  Info: { render: () => 'Info' },
-  Zap: { render: () => 'Zap' },
-  Gauge: { render: () => 'Gauge' },
-  X: { render: () => 'X' }
-}))
+// Mock Lucide icons — use importOriginal to get all exports, then stub render
+vi.mock('lucide-vue-next', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>()
+  const stubbed: Record<string, unknown> = {}
+  for (const key of Object.keys(actual)) {
+    stubbed[key] = typeof actual[key] === 'object' ? { render: () => 'icon' } : actual[key]
+  }
+  return stubbed
+})
 
 describe('SpeedReadEngine Pacing Logic', () => {
   beforeEach(() => {
@@ -75,7 +70,7 @@ describe('SpeedReadEngine Pacing Logic', () => {
     reader.isPlaying = true
     reader.activeMode = 'paced'
 
-    mount(SpeedReadEngine, {
+    const wrapper = mount(SpeedReadEngine, {
       props: { fontSize: 100 }
     })
 
@@ -83,6 +78,7 @@ describe('SpeedReadEngine Pacing Logic', () => {
     expect(reader.currentWordIndex).toBe(2)
 
     reader.isPlaying = false
+    await wrapper.vm.$nextTick()
     vi.advanceTimersByTime(1000)
     expect(reader.currentWordIndex).toBe(2) // Should NOT increment
   })

@@ -26,7 +26,7 @@ const handleSubmit = async () => {
     }
     router.push('/welcome')
   } catch (err: unknown) {
-    error.value = (err as any)?.message || 'Authentication failed'
+    error.value = err instanceof Error ? err.message : 'Authentication failed'
   } finally {
     loading.value = false
   }

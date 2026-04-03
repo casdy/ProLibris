@@ -36,8 +36,19 @@ export const filters = reactive({
 })
 
 const memoizedCache = new Map<string, CacheEntry>()
+const MAX_CACHE_SIZE = 50
 const DISK_CACHE_KEY = 'prolibris_local_catalog_p1'
 const CACHE_TTL = 1000 * 60 * 30 // 30 minutes
+let fetchGeneration = 0 // Race-condition guard: ignore stale responses
+
+/** Evict oldest entries when cache exceeds MAX_CACHE_SIZE (FIFO) */
+function cacheSet(key: string, entry: CacheEntry) {
+  if (memoizedCache.size >= MAX_CACHE_SIZE) {
+    const oldestKey = memoizedCache.keys().next().value
+    if (oldestKey !== undefined) memoizedCache.delete(oldestKey)
+  }
+  memoizedCache.set(key, entry)
+}
 
 // ─── CORE LOGIC (SINGLETON METHODS) ──────────────────────────────
 
@@ -76,6 +87,7 @@ const mapBook = (doc: Book): HybridBook => ({
 // ─── OPTIMIZED FETCHING (LOCAL-ONLY) ──────────────────────────
 
 export const fetchBooks = async (forceRefresh = false) => {
+  const generation = ++fetchGeneration
   const currentPageVal = currentPage.value
   const currentFilters = { ...filters }
   const currentKey = getCacheKey(currentPageVal, currentFilters)
@@ -92,7 +104,7 @@ export const fetchBooks = async (forceRefresh = false) => {
 
   // 2. Disk Cache (Default Page 1 Only)
   const isDefaultP1 = currentPageVal === 1 && !currentFilters.search && !currentFilters.topic
-  if (isDefaultP1 && !forceRefresh && books.value.length === 0) {
+  if (isDefaultP1 && !forceRefresh && books.value.length === 0 && typeof localStorage !== 'undefined') {
     const diskData = localStorage.getItem(DISK_CACHE_KEY)
     if (diskData) {
       try {
@@ -115,6 +127,9 @@ export const fetchBooks = async (forceRefresh = false) => {
     const appwriteRes = await databases.listDocuments<Book>(DATABASE_ID, BOOKS_COLLECTION_ID, queries)
     const localBooks = appwriteRes.documents.map(mapBook)
     
+    // Stale response guard: if a newer fetch was triggered, discard this result
+    if (generation !== fetchGeneration) return
+
     // Update UI instantly with Local results
     books.value = localBooks
     totalCount.value = appwriteRes.total
@@ -128,8 +143,10 @@ export const fetchBooks = async (forceRefresh = false) => {
 
     // 4. Cache final result
     const entry = { books: localBooks, totalCount: totalCount.value, timestamp: Date.now() }
-    memoizedCache.set(currentKey, entry)
-    if (isDefaultP1) localStorage.setItem(DISK_CACHE_KEY, JSON.stringify(entry))
+    cacheSet(currentKey, entry)
+    if (isDefaultP1 && typeof localStorage !== 'undefined') {
+      localStorage.setItem(DISK_CACHE_KEY, JSON.stringify(entry))
+    }
 
   } catch (error) {
     console.error('Failed to fetch local catalog:', error)
@@ -161,9 +178,7 @@ const prefetchPage = async (page: number) => {
         totalCount: appwriteRes.total, 
         timestamp: Date.now() 
     }
-    memoizedCache.set(key, initialEntry)
-
-    memoizedCache.set(key, initialEntry)
+    cacheSet(key, initialEntry)
   } catch { /* ignore prefetch errors */ }
 }
 
@@ -173,7 +188,9 @@ export const changePage = (page: number) => {
     fetchBooks()
     
     // Smooth scroll back to top of the catalog for better UX
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
   }
 }
 
@@ -183,7 +200,9 @@ export const updateFilters = (newFilters: Partial<typeof filters>) => {
   fetchBooks()
   
   // Smooth scroll back to top of the catalog for better UX
-  window.scrollTo({ top: 0, behavior: 'smooth' })
+  if (typeof window !== 'undefined') {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 }
 
 // ─── COMPOSABLE WRAPPER (SAFE FOR SETUP) ─────────────────────────

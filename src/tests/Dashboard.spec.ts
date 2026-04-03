@@ -5,21 +5,15 @@ import BookCard from '@/components/BookCard.vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { useAuthStore } from '@/stores/auth'
 
-// Mock Lucide icons
-vi.mock('lucide-vue-next', () => ({
-  BookOpen: { render: () => 'BookOpen' },
-  Flame: { render: () => 'Flame' },
-  Sparkles: { render: () => 'Sparkles' },
-  LogOut: { render: () => 'LogOut' },
-  ChevronRight: { render: () => 'ChevronRight' },
-  Moon: { render: () => 'Moon' },
-  Sun: { render: () => 'Sun' },
-  Search: { render: () => 'Search' },
-  X: { render: () => 'X' },
-  Library: { render: () => 'Library' },
-  CheckCircle2: { render: () => 'CheckCircle2' },
-  Filter: { render: () => 'Filter' }
-}))
+// Mock Lucide icons — use importOriginal to get all exports, then stub render
+vi.mock('lucide-vue-next', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>()
+  const stubbed: Record<string, unknown> = {}
+  for (const key of Object.keys(actual)) {
+    stubbed[key] = typeof actual[key] === 'object' ? { render: () => 'icon' } : actual[key]
+  }
+  return stubbed
+})
 
 // Mock AppLogo
 vi.mock('@/components/AppLogo.vue', () => ({
@@ -46,7 +40,8 @@ vi.mock('@/stores/library', () => ({
     fetchBooks: vi.fn(),
     fetchUserSessions: vi.fn(),
     sessions: [],
-    continueReadingBook: null
+    continueReadingBook: null,
+    activeSummons: {}
   })
 }))
 

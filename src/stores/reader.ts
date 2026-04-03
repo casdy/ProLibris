@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { markRaw } from 'vue'
 import { useLibraryStore } from './library'
 import { useAuthStore } from './auth'
 import {
@@ -14,6 +15,16 @@ import {
 } from '@/lib/textExtractor'
 
 export type ReadingMode = 'standard' | 'typing' | 'paced'
+
+/** Minimal structural type for epub.js Book — only the API surface used by the store */
+interface EpubBook {
+  spine: {
+    length: number
+    get: (index: number) => { load: (loader: unknown) => Promise<unknown> } | undefined
+    each: (cb: (section: { label: string; href: string }, index: number) => void) => void
+  }
+  load: (path: string) => Promise<unknown>
+}
 
 export interface SessionStats {
   totalKeystrokes: number
@@ -50,9 +61,8 @@ export const useReaderStore = defineStore('reader', {
     // Mode
     activeMode: 'standard' as ReadingMode,
 
-    // Book reference
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    bookInstance: null as any,
+    // Book reference (markRaw prevents Vue from proxying the epub.js internal tree)
+    bookInstance: null as EpubBook | null,
     bookId: '',
 
     // Chapter data
@@ -109,12 +119,12 @@ export const useReaderStore = defineStore('reader', {
   actions: {
     // ─── INITIALIZATION ─────────────────────────────────────────
     async initBook(book: unknown, bookId: string) {
-      this.bookInstance = book as any
+      this.bookInstance = markRaw(book as EpubBook)
       this.bookId = bookId
       
       // Build spine item list
       const items: SpineItem[] = []
-      ;(book as any).spine.each((section: { label: string; href: string }, index: number) => {
+      ;(book as EpubBook).spine.each((section: { label: string; href: string }, index: number) => {
         items.push({
           index,
           label: section.label || `Section ${index + 1}`,
@@ -250,7 +260,6 @@ export const useReaderStore = defineStore('reader', {
 
       // Track key accuracy
       const expectedChar = currentToken.isNewline ? 'Enter' : currentToken.char
-      // const typedKey = currentToken.isNewline ? event.key : event.key
 
       if (!this.errorMap[expectedChar]) {
         this.errorMap[expectedChar] = { total: 0, errors: 0 }

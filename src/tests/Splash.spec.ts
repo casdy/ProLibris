@@ -21,16 +21,18 @@ describe('SplashScreen', () => {
     })
 
     expect(wrapper.find('h2').text()).toContain('Prolibris')
-    expect(wrapper.text()).toContain('Initializing Engine...')
+    expect(wrapper.text()).toContain('Initializing ProLibris Engine...')
 
     // Finish initialization in host
     await wrapper.setProps({ isReady: true })
     
-    // minimum time is 1200ms
+    // Advance past the min time (1200ms) + allow the 100ms interval to fire
     vi.advanceTimersByTime(1500)
+    await wrapper.vm.$nextTick()
     
-    // Wait for internal exit animation (600ms)
+    // Wait for internal exit animation (600ms setTimeout)
     vi.advanceTimersByTime(700)
+    await wrapper.vm.$nextTick()
     
     // In Vue Test Utils, the v-if="show" will be false now
     expect(wrapper.find('.fixed').exists()).toBe(false)
@@ -45,9 +47,11 @@ describe('SplashScreen', () => {
 
     // Wait for safety fallback (4000ms)
     vi.advanceTimersByTime(4500)
+    await wrapper.vm.$nextTick()
     
-    // Wait for exit
+    // Wait for exit animation
     vi.advanceTimersByTime(700)
+    await wrapper.vm.$nextTick()
     
     expect(wrapper.find('.fixed').exists()).toBe(false)
   })

@@ -37,7 +37,7 @@ export interface SentenceToken {
  * then walks the DOM to extract text.
  */
 export async function extractChapterText(
-  book: { spine: any; load: (p: any) => Promise<any> },
+  book: { spine: { length: number; get: (index: number) => unknown }; load: (p: string) => Promise<unknown> },
   spineIndex: number
 ): Promise<ExtractedChapter> {
   const spine = book.spine
@@ -51,21 +51,30 @@ export async function extractChapterText(
   }
 
   // Load the section contents — epub.js returns a Document
-  const contents = await section.load(book.load.bind(book))
+  const sectionObj = section as { load: (loader: unknown) => Promise<unknown> }
+  const contents = await sectionObj.load(book.load.bind(book))
   
   let doc: Document
   if (contents instanceof Document) {
     doc = contents
-  } else if (contents?.document) {
-    doc = contents.document
+  } else if (typeof contents === 'object' && contents !== null && 'document' in contents) {
+    doc = (contents as { document: Document }).document
   } else if (typeof contents === 'string') {
+    if (typeof DOMParser === 'undefined') {
+      console.warn('textExtractor: DOMParser not available in this environment')
+      return { plainText: '', paragraphs: [], sentences: [], wordCount: 0, charCount: 0, title: '' }
+    }
     const parser = new DOMParser()
     doc = parser.parseFromString(contents, 'text/html')
   } else {
     // Try to get the body element directly
+    if (typeof document === 'undefined') {
+      console.warn('textExtractor: document API not available in this environment')
+      return { plainText: '', paragraphs: [], sentences: [], wordCount: 0, charCount: 0, title: '' }
+    }
     doc = document.implementation.createHTMLDocument('')
-    if (contents?.innerHTML) {
-      doc.body.innerHTML = contents.innerHTML
+    if (typeof contents === 'object' && contents !== null && 'innerHTML' in contents) {
+      doc.body.innerHTML = (contents as { innerHTML: string }).innerHTML
     }
   }
 

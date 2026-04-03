@@ -55,9 +55,8 @@ const router = createRouter({
       meta: { requiresAuth: true },
       beforeEnter: async (to, from, next) => {
         const auth = useAuthStore()
-        const urlParams = new URLSearchParams(window.location.search)
-        const userId = urlParams.get('userId')
-        const secret = urlParams.get('secret')
+        const userId = to.query.userId as string | undefined
+        const secret = to.query.secret as string | undefined
         
         if (userId && secret) {
           try {

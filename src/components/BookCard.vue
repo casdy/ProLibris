@@ -26,7 +26,7 @@ const toggleLike = () => {
 
 const isSummoning = computed(() => {
   if (props.book.isLocal) return false
-  return library.activeSummons.has(props.book.id as number)
+  return !!library.activeSummons[props.book.id as number]
 })
 
 const handleReadClick = () => {

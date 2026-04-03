@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
-import Reader from '@/views/Reader.vue'
+import Reader from '@/views/ReaderView.vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { createRouter, createWebHistory } from 'vue-router'
 
@@ -66,7 +66,7 @@ describe('Reader.vue - Stability Tests', () => {
     await new Promise(resolve => setTimeout(resolve, 0))
     
     // If book is not found in store and fetchBooks returns empty
-    expect(wrapper.text()).toContain('Book not found in database')
+    expect(wrapper.text()).toContain('Archival Access Restricted')
   })
 
   it('renders ReaderLayout when epubData is successfully fetched', async () => {
