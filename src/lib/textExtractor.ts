@@ -11,6 +11,8 @@ export interface ExtractedChapter {
   plainText: string
   /** Array of paragraph strings */
   paragraphs: string[]
+  /** Array of sentence tokens */
+  sentences: SentenceToken[]
   /** Total word count */
   wordCount: number
   /** Total character count (excluding line breaks) */
@@ -19,23 +21,33 @@ export interface ExtractedChapter {
   title: string
 }
 
+export interface SentenceToken {
+  text: string
+  index: number
+  paragraphIndex: number
+  /** The index of the first word of this sentence in the total word list */
+  wordStartIndex: number
+  /** Number of words in this sentence */
+  wordCount: number
+}
+
 /**
  * Load a spine section and extract its text content.
  * Uses epub.js Section.load() to get the raw document, 
  * then walks the DOM to extract text.
  */
 export async function extractChapterText(
-  book: any,
+  book: { spine: any; load: (p: any) => Promise<any> },
   spineIndex: number
 ): Promise<ExtractedChapter> {
   const spine = book.spine
   if (!spine || spineIndex < 0 || spineIndex >= spine.length) {
-    return { plainText: '', paragraphs: [], wordCount: 0, charCount: 0, title: '' }
+    return { plainText: '', paragraphs: [], sentences: [], wordCount: 0, charCount: 0, title: '' }
   }
 
   const section = spine.get(spineIndex)
   if (!section) {
-    return { plainText: '', paragraphs: [], wordCount: 0, charCount: 0, title: '' }
+    return { plainText: '', paragraphs: [], sentences: [], wordCount: 0, charCount: 0, title: '' }
   }
 
   // Load the section contents — epub.js returns a Document
@@ -73,11 +85,8 @@ export async function extractChapterText(
 
   if (blocks.length > 0) {
     blocks.forEach(block => {
-      // Skip if this block is nested inside another block we're already processing
-      // (e.g., a <p> inside a <div> — we'd get the <p> separately)
       const text = cleanText(block.textContent || '')
       if (text && !seen.has(text)) {
-        // Check if any child block exists that also has this exact text
         const childBlocks = block.querySelectorAll(blockSelectors)
         if (childBlocks.length === 0 || text !== cleanText(block.querySelector(blockSelectors)?.textContent || '')) {
           paragraphs.push(text)
@@ -86,7 +95,6 @@ export async function extractChapterText(
       }
     })
   } else {
-    // Fallback: just grab body text
     const bodyText = cleanText(doc.body?.textContent || '')
     if (bodyText) {
       paragraphs.push(bodyText)
@@ -96,14 +104,11 @@ export async function extractChapterText(
   const plainText = paragraphs.join('\n\n')
   const charCount = plainText.replace(/\n/g, '').length
   const wordCount = plainText.split(/\s+/).filter(w => w.length > 0).length
+  const sentences = tokenizeSentences(paragraphs)
 
-  return { plainText, paragraphs, wordCount, charCount, title }
+  return { plainText, paragraphs, sentences, wordCount, charCount, title }
 }
 
-/**
- * Clean extracted text: normalize whitespace, decode HTML entities,
- * trim leading/trailing space.
- */
 function cleanText(raw: string): string {
   return raw
     .replace(/&nbsp;/g, ' ')
@@ -116,9 +121,6 @@ function cleanText(raw: string): string {
     .trim()
 }
 
-/**
- * Split text into individual word objects for paced reading.
- */
 export interface WordToken {
   word: string
   index: number
@@ -140,9 +142,6 @@ export function tokenizeWords(paragraphs: string[]): WordToken[] {
   return tokens
 }
 
-/**
- * Split text into individual character objects for typing mode.
- */
 export type CharStatus = 'pending' | 'correct' | 'error'
 
 export interface CharToken {
@@ -158,7 +157,6 @@ export function tokenizeChars(paragraphs: string[]): CharToken[] {
   let globalIndex = 0
 
   paragraphs.forEach((para, pIdx) => {
-    // Add paragraph break marker between paragraphs
     if (pIdx > 0) {
       tokens.push({
         char: '¶',
@@ -180,6 +178,44 @@ export function tokenizeChars(paragraphs: string[]): CharToken[] {
       })
       globalIndex++
     }
+  })
+
+  return tokens
+}
+
+/**
+ * Split text into sentences for TTS synthesis chunks.
+ */
+export function tokenizeSentences(paragraphs: string[]): SentenceToken[] {
+  const tokens: SentenceToken[] = []
+  let sentenceGlobalIndex = 0
+  let wordGlobalIndex = 0
+
+  paragraphs.forEach((para, pIdx) => {
+    // Regex to split sentences while preserving the delimiter
+    const sentenceRegex = /[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/g
+    const matches: string[] = para.match(sentenceRegex) || []
+    
+    if (matches.length === 0 && para.trim().length > 0) {
+      matches.push(para)
+    }
+
+    matches.forEach(match => {
+      const trimmedText = match.trim()
+      if (trimmedText.length === 0) return
+
+      const words = trimmedText.split(/\s+/).filter(w => w.length > 0)
+      
+      tokens.push({
+        text: trimmedText,
+        index: sentenceGlobalIndex++,
+        paragraphIndex: pIdx,
+        wordStartIndex: wordGlobalIndex,
+        wordCount: words.length
+      })
+      
+      wordGlobalIndex += words.length
+    })
   })
 
   return tokens

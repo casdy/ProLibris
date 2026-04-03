@@ -16,13 +16,29 @@ const router = createRouter({
     {
       path: '/dashboard',
       name: 'dashboard',
-      component: () => import('@/views/Dashboard.vue'),
+      component: () => import('@/views/DashboardView.vue'),
       meta: { requiresAuth: true },
+    },
+    {
+      path: '/profile',
+      name: 'profile',
+      component: () => import('@/views/ProfileView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/welcome',
+      name: 'welcome',
+      component: () => import('@/views/AuthSplash.vue'),
+    },
+    {
+      path: '/farewell',
+      name: 'farewell',
+      component: () => import('@/views/AuthSplash.vue'),
     },
     {
       path: '/read/:id',
       name: 'reader',
-      component: () => import('@/views/Reader.vue'),
+      component: () => import('@/views/ReaderView.vue'),
       meta: { requiresAuth: true },
     },
   ],

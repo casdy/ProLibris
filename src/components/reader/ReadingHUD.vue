@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useReaderStore } from '@/stores/reader'
 import { computed } from 'vue'
-import { Gauge, Target, Clock, TrendingUp } from 'lucide-vue-next'
+import { Gauge, Target, Clock, Zap } from 'lucide-vue-next'
 
 const reader = useReaderStore()
 
@@ -35,8 +35,8 @@ const showWpm = computed(() => reader.activeMode !== 'standard')
   >
     <!-- WPM -->
     <div v-if="showWpm" class="flex items-center gap-2">
-      <div class="p-1.5 rounded-lg bg-[#f02e65]/10">
-        <Gauge class="w-4 h-4 text-[#f02e65]" />
+      <div class="p-1.5 rounded-lg bg-[#AE0001]/10">
+        <Gauge class="w-4 h-4 text-[#AE0001]" />
       </div>
       <div class="flex flex-col">
         <span class="text-[9px] uppercase tracking-widest text-[var(--text-soft)] opacity-70">WPM</span>
@@ -59,7 +59,7 @@ const showWpm = computed(() => reader.activeMode !== 'standard')
     <div class="flex-1 min-w-[80px]">
       <div class="flex items-center justify-between mb-1">
         <span class="text-[9px] uppercase tracking-widest text-[var(--text-soft)] opacity-70">Progress</span>
-        <span class="text-[10px] font-black text-[#f02e65]">{{ progressDisplay }}%</span>
+        <span class="text-[10px] font-black text-[#AE0001]">{{ progressDisplay }}%</span>
       </div>
       <div class="h-1.5 bg-black/5 dark:bg-white/5 rounded-full overflow-hidden">
         <div class="progress-bar-fill h-full rounded-full" :style="{ width: `${progressDisplay}%` }" />
@@ -76,5 +76,17 @@ const showWpm = computed(() => reader.activeMode !== 'standard')
         <span class="hud-stat text-xs font-bold theme-text">{{ timeDisplay }}</span>
       </div>
     </div>
+
+    <div class="w-px h-6 bg-black/10 dark:bg-white/10 mx-1" />
+
+    <!-- Speed Read Focus Toggle -->
+    <button
+      @click="reader.toggleSpeedReadOverlay()"
+      class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#AE0001]/10 text-[#AE0001] hover:bg-[#AE0001] hover:text-white transition-all group border border-[#AE0001]/20"
+      title="Enter ProLibris Focus Mode"
+    >
+      <Zap class="w-4 h-4 fill-current group-hover:scale-125 transition-transform" />
+      <span class="text-[10px] font-black uppercase tracking-wider hidden md:inline">Engine Focus</span>
+    </button>
   </div>
 </template>

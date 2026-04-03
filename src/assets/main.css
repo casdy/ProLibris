@@ -1,10 +1,11 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,700;0,800;1,600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Outfit:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --color-brand-primary: #f02e65;
+  --color-brand-primary: #AE0001; /* Scarlet */
+  --color-brand-gold: #EEBA30;    /* Gold */
   --font-outfit: "Outfit", sans-serif;
-  --font-playfair: "Playfair Display", serif;
+  --font-cinzel: "Cinzel", serif;
 }
 
 /* ─── LIGHT THEME: Warm Parchment & Mahogany ─────────────────── */
@@ -22,9 +23,9 @@
   --color-error:            #f87171;
   --color-error-bg:         rgba(248, 113, 113, 0.15);
   --color-pending:          #9A7D5A;
-  --color-caret:            #f02e65;
-  --color-paced-active:     #f02e65;
-  --color-paced-active-bg:  rgba(240, 46, 101, 0.18);
+  --color-caret:            #AE0001;
+  --color-paced-active:     #AE0001;
+  --color-paced-active-bg:  rgba(174, 0, 1, 0.18);
   --color-paced-dim:        rgba(232, 213, 160, 0.28);
   --color-hud-bg:           rgba(28, 16, 6, 0.88);
   --color-hud-border:       rgba(212, 175, 55, 0.20);
@@ -45,9 +46,9 @@
   --color-error:            #f87171;
   --color-error-bg:         rgba(248, 113, 113, 0.15);
   --color-pending:          #6B5040;
-  --color-caret:            #f02e65;
-  --color-paced-active:     #f02e65;
-  --color-paced-active-bg:  rgba(240, 46, 101, 0.20);
+  --color-caret:            #AE0001;
+  --color-paced-active:     #AE0001;
+  --color-paced-active-bg:  rgba(174, 0, 1, 0.20);
   --color-paced-dim:        rgba(235, 235, 239, 0.20);
   --color-hud-bg:           rgba(10, 5, 1, 0.90);
   --color-hud-border:       rgba(212, 175, 55, 0.12);
@@ -64,6 +65,11 @@
     color: var(--text-main);
     @apply transition-colors duration-300 min-h-screen;
     font-family: var(--font-outfit);
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-cinzel);
+    letter-spacing: -0.02em;
   }
 }
 
@@ -183,7 +189,7 @@ input::placeholder {
   background-color: var(--color-caret);
   border-radius: 2px;
   animation: caretPulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-  box-shadow: 0 0 8px rgba(240, 46, 101, 0.5), 0 0 20px rgba(240, 46, 101, 0.2);
+  box-shadow: 0 0 8px rgba(174, 0, 1, 0.5), 0 0 20px rgba(174, 0, 1, 0.2);
   z-index: 10;
 }
 
@@ -210,14 +216,14 @@ input::placeholder {
 }
 
 .paced-word--active {
-  color: var(--color-paced-active);
-  background-color: var(--color-paced-active-bg);
+  color: #EEBA30; /* Gold for and active word in paced mode */
+  background-color: rgba(174, 0, 1, 0.3); /* Scarlet background */
   font-weight: 700;
   transform: scale(1.05);
   display: inline-block;
   border-radius: 4px;
   padding: 2px 4px;
-  box-shadow: 0 2px 8px rgba(240, 46, 101, 0.15);
+  box-shadow: 0 2px 8px rgba(174, 0, 1, 0.25);
 }
 
 .paced-word--past {
@@ -247,9 +253,9 @@ input::placeholder {
 
 /* ─── PROGRESS BAR ─────────────────────────────────────────── */
 .progress-bar-fill {
-  background: linear-gradient(90deg, #f02e65, #f43f5e, #fb7185);
+  background: linear-gradient(90deg, #AE0001, #EEBA30, #D4AF37);
   transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 0 12px rgba(240, 46, 101, 0.3);
+  box-shadow: 0 0 12px rgba(174, 0, 1, 0.4);
 }
 
 /* ─── MODE SWITCHER ────────────────────────────────────────── */
@@ -281,7 +287,7 @@ input::placeholder {
 .reader-scroll-container {
   scroll-behavior: smooth;
   scrollbar-width: thin;
-  scrollbar-color: rgba(240, 46, 101, 0.3) transparent;
+  scrollbar-color: rgba(174, 0, 1, 0.3) transparent;
 }
 
 .reader-scroll-container::-webkit-scrollbar {
@@ -293,12 +299,12 @@ input::placeholder {
 }
 
 .reader-scroll-container::-webkit-scrollbar-thumb {
-  background-color: rgba(240, 46, 101, 0.3);
+  background-color: rgba(174, 0, 1, 0.4);
   border-radius: 3px;
 }
 
 .reader-scroll-container::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(240, 46, 101, 0.5);
+  background-color: rgba(174, 0, 1, 0.6);
 }
 
 /* ─── ANIMATIONS ───────────────────────────────────────────── */

@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { databases, DATABASE_ID, BOOKS_COLLECTION_ID, SESSIONS_COLLECTION_ID } from '@/lib/appwrite'
+import { databases, storage, DATABASE_ID, BOOKS_COLLECTION_ID, SESSIONS_COLLECTION_ID, BUCKET_ID } from '@/lib/appwrite'
 import { ID, Query, type Models } from 'appwrite'
 import { useAuthStore } from './auth'
 
@@ -37,21 +37,39 @@ function shuffleArray<T>(arr: T[]): T[] {
   return shuffled
 }
 
+function sortBooks(list: Book[], sortBy: string): Book[] {
+  const sorted = [...list]
+  if (sortBy === 'title') {
+    sorted.sort((a, b) => a.title.localeCompare(b.title))
+  } else if (sortBy === 'author') {
+    sorted.sort((a, b) => a.author.localeCompare(b.author))
+  } else if (sortBy === 'genre') {
+    sorted.sort((a, b) => (a.subjects[0] || '').localeCompare(b.subjects[0] || ''))
+  }
+  return sorted
+}
+
 export const useLibraryStore = defineStore('library', {
   state: () => ({
     allBooks: [] as Book[],
-    recommendedBooks: [] as Book[],
+    enchantedBooks: [] as Book[],
+    discoverBooks: [] as Book[],
     sessions: [] as ReadingSession[],
     loading: false,
     searchQuery: '',
     searchResults: [] as Book[],
     isSearching: false,
     allGenres: [] as string[],
+    
+    // UI state for filtering/sorting
+    enchantedFilter: { genre: '', sort: 'title' },
+    discoverFilter: { genre: '', sort: 'title' },
+    activeSummons: new Set<number>()
   }),
   getters: {
     books(state) {
-      // Backward-compatible: returns recommended or search results
-      return state.isSearching ? state.searchResults : state.recommendedBooks
+      // Backward-compatible: returns enchanted or search results
+      return state.isSearching ? state.searchResults : state.enchantedBooks
     },
     likedBooks(state) {
       const likedIds = state.sessions.filter(s => s.is_liked).map(s => s.book_id)
@@ -72,7 +90,21 @@ export const useLibraryStore = defineStore('library', {
       return state.allBooks.find(b => b.$id === lastSession?.book_id)
     },
     recommendations(): Book[] {
-      return this.recommendedBooks
+      return this.enchantedBooks
+    },
+    filteredEnchanted(state): Book[] {
+      let list = [...state.enchantedBooks]
+      if (state.enchantedFilter.genre) {
+        list = list.filter(b => b.subjects.includes(state.enchantedFilter.genre))
+      }
+      return sortBooks(list, state.enchantedFilter.sort)
+    },
+    filteredDiscover(state): Book[] {
+      let list = [...state.discoverBooks]
+      if (state.discoverFilter.genre) {
+        list = list.filter(b => b.subjects.includes(state.discoverFilter.genre))
+      }
+      return sortBooks(list, state.discoverFilter.sort)
     }
   },
   actions: {
@@ -107,17 +139,33 @@ export const useLibraryStore = defineStore('library', {
 
         // Cache recommended book IDs for offline
         try {
-          localStorage.setItem('prolibris_recommended', JSON.stringify(this.recommendedBooks.map(b => b.$id)))
-        } catch {}
+          localStorage.setItem('prolibris_recommended', JSON.stringify(this.enchantedBooks.map((b: Book) => b.$id)))
+        } catch (e) {
+          console.error('Failed to cache recommended books:', e)
+        }
       } finally {
         this.loading = false
       }
     },
 
     generateRecommendations() {
-      // Pick 30 random books spread across categories
+      // Pick 30 diverse books for the Enchanted Selection
       const shuffled = shuffleArray(this.allBooks)
-      this.recommendedBooks = shuffled.slice(0, 30)
+      this.enchantedBooks = shuffled.slice(0, 30)
+      
+      // Pick 40 MORE unique books for Discover More
+      const usedIds = new Set(this.enchantedBooks.map(b => b.$id))
+      this.discoverBooks = shuffled
+        .filter((b: Book) => !usedIds.has(b.$id))
+        .slice(0, 40)
+    },
+
+    setEnchantedFilter(genre: string, sort: string) {
+      this.enchantedFilter = { genre, sort }
+    },
+
+    setDiscoverFilter(genre: string, sort: string) {
+      this.discoverFilter = { genre, sort }
     },
 
     searchBooks(query: string) {
@@ -156,12 +204,12 @@ export const useLibraryStore = defineStore('library', {
       this.sessions = response.documents
     },
 
-    async updateProgress(bookId: string, cfi: string, pagesInc = 0, analyticsData?: Record<string, any>) {
+    async updateProgress(bookId: string, cfi: string, pagesInc = 0, analyticsData?: Record<string, unknown>) {
       const auth = useAuthStore()
       if (!auth.user) return
 
-      let session = this.sessions.find(s => s.book_id === bookId)
-      const data: Record<string, any> = {
+      const session = this.sessions.find(s => s.book_id === bookId)
+      const data: Record<string, unknown> = {
         progress_cfi: cfi,
         last_read_at: new Date().toISOString(),
         status: 'reading',
@@ -190,7 +238,7 @@ export const useLibraryStore = defineStore('library', {
        const auth = useAuthStore()
        if (!auth.user) return
        
-       let session = this.sessions.find(s => s.book_id === bookId)
+       const session = this.sessions.find(s => s.book_id === bookId)
        if (session) {
          await databases.updateDocument(DATABASE_ID, SESSIONS_COLLECTION_ID, session.$id, { is_liked: !session.is_liked })
        } else {
@@ -203,6 +251,75 @@ export const useLibraryStore = defineStore('library', {
          })
        }
        await this.fetchUserSessions()
+    },
+
+    async importInBackground(gutenbergId: number, metadata: Partial<Book>) {
+      const { useUIStore } = await import('./ui')
+      const ui = useUIStore()
+      
+      if (this.activeSummons.has(gutenbergId)) {
+        ui.showNotification(`Already summoning "${metadata.title}"`, 'info')
+        return
+      }
+
+      const notificationId = ui.showNotification(`Summoning "${metadata.title}" into your archive...`, 'info', 0)
+      this.activeSummons.add(gutenbergId)
+
+      try {
+        const book = await this.importBookFromGutenberg(gutenbergId, metadata)
+        if (book) {
+          ui.removeNotification(notificationId)
+          ui.showNotification(`"${book.title}" is ready in your archive!`, 'success')
+        } else {
+          throw new Error('Import returned null')
+        }
+      } catch (err) {
+        console.error('Background import failed:', err)
+        ui.removeNotification(notificationId)
+        ui.showNotification(`Failed to summon "${metadata.title}". Checking parchment for errors...`, 'error')
+      } finally {
+        this.activeSummons.delete(gutenbergId)
+      }
+    },
+
+    async importBookFromGutenberg(gutenbergId: number, metadata: Partial<Book>): Promise<Book | null> {
+      this.loading = true
+      try {
+        // 1. Double check if already imported (concurrency safety)
+        const existing = this.allBooks.find(b => b.gutenberg_id === gutenbergId)
+        if (existing) return existing
+
+        // 2. Fetch EPUB from Gutenberg
+        const epubUrl = `https://www.gutenberg.org/ebooks/${gutenbergId}.epub.images`
+        const response = await fetch(epubUrl)
+        if (!response.ok) throw new Error(`Gutenberg fetch failed: ${response.status}`)
+        
+        const blob = await response.blob()
+        const file = new File([blob], `${gutenbergId}.epub`, { type: 'application/epub+zip' })
+
+        // 3. Upload to Appwrite Storage
+        const fileId = ID.unique()
+        await storage.createFile(BUCKET_ID, fileId, file)
+
+        // 4. Create Book Document
+        const newBook = await databases.createDocument<Book>(DATABASE_ID, BOOKS_COLLECTION_ID, ID.unique(), {
+          title: metadata.title || 'Unknown Title',
+          author: metadata.author || 'Unknown Author',
+          subjects: metadata.subjects || [],
+          cover_url: metadata.cover_url || `https://www.gutenberg.org/cache/epub/${gutenbergId}/pg${gutenbergId}.cover.medium.jpg`,
+          file_id: fileId,
+          gutenberg_id: gutenbergId
+        })
+
+        // 5. Update local state
+        this.allBooks.push(newBook)
+        return newBook
+      } catch (err) {
+        console.error('Failed to import book:', err)
+        return null
+      } finally {
+        this.loading = false
+      }
     }
   },
 })

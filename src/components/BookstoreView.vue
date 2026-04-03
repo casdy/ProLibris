@@ -1,20 +1,52 @@
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref } from 'vue'
 import { useLibraryStore } from '@/stores/library'
-import { useRouter } from 'vue-router'
 import {
-  X, BookOpen, Clock, BarChart2, Heart, Target,
-  Zap, ChevronRight, Bookmark, CheckCircle2, Play,
-  Keyboard, Star, Sparkles, RefreshCw
+  X, BookOpen, Clock, Zap, ChevronRight, CheckCircle2, Play, Keyboard, Star, Sparkles, RefreshCw, Heart, ArrowRight
 } from 'lucide-vue-next'
 
+import SectionControls from './SectionControls.vue'
+
 const library = useLibraryStore()
-const router  = useRouter()
+
+// Filtering and Sorting state
+const activeGenre = ref('')
+const activeSort  = ref('title')
+const genres      = computed(() => library.allGenres.slice(0, 20))
+
+const filteredBooks = computed(() => {
+  let list = [...library.enchantedBooks]
+  if (activeGenre.value) {
+    list = list.filter(b => b.subjects.includes(activeGenre.value))
+  }
+  
+  if (activeSort.value === 'title') {
+    list.sort((a, b) => a.title.localeCompare(b.title))
+  } else if (activeSort.value === 'author') {
+    list.sort((a, b) => a.author.localeCompare(b.author))
+  } else if (activeSort.value === 'genre') {
+    list.sort((a, b) => (a.subjects[0] || '').localeCompare(b.subjects[0] || ''))
+  }
+  
+  return list
+})
+
+const displayedBooks = computed(() => filteredBooks.value.slice(0, 30))
+
+const updateGenre = (g: string) => activeGenre.value = g
+const updateSort  = (s: string) => activeSort.value  = s
+
+import { type Book, type ReadingSession } from '@/stores/library'
 
 // ─── Selection Modal Logic ───────────────────────────────────────
-const selected = ref<any | null>(null)
+const selected = ref<{
+  book: Book,
+  session?: ReadingSession,
+  isLiked: boolean,
+  isReading: boolean
+} | null>(null)
 
-function openBook(book: any) {
+function openBook(book: Book) {
   const session = library.sessions.find(s => s.book_id === book.$id)
   selected.value = {
     book,
@@ -26,6 +58,12 @@ function openBook(book: any) {
 
 function closeModal() {
   selected.value = null
+}
+
+async function toggleFavorite() {
+  if (!selected.value) return
+  await library.toggleLike(selected.value.book.$id)
+  selected.value.isLiked = !selected.value.isLiked
 }
 
 function formatDate(dateStr?: string) {
@@ -50,7 +88,7 @@ function modeInfo(mode?: string) {
 
 const statusColor: Record<string, string> = {
   completed: '#22c55e',
-  reading:   '#f02e65',
+  reading:   '#AE0001',
   unread:    '#6b7280',
 }
 
@@ -96,18 +134,32 @@ function scrollShelf(dir: 'left' | 'right') {
 
     <!-- The Bookstore Shelf -->
     <div class="bookstore-container relative z-10">
-      <div class="shelf-header flex items-center justify-between mb-8 px-8">
-        <div class="flex items-center gap-3">
-          <div class="p-2.5 bg-[#f02e65]/10 rounded-xl">
-             <Sparkles class="w-6 h-6 text-[#f02e65]" />
+      <div class="shelf-header mb-8 px-8 flex flex-col gap-8">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="p-2.5 bg-[#AE0001]/10 rounded-xl border border-[#AE0001]/20 shadow-lg">
+               <Sparkles class="w-6 h-6 text-[#EEBA30]" />
+            </div>
+            <div>
+              <h3 class="text-2xl font-black theme-text tracking-tight font-cinzel text-[#EEBA30]">Enchanted Selection</h3>
+              <p class="text-xs theme-text-soft opacity-60 font-medium">Magic-curated titles from across the realms</p>
+            </div>
           </div>
-          <h3 class="text-2xl font-bold theme-text tracking-tight">Enchanted Selection</h3>
+          <button @click="refreshRecommendations" 
+            class="flex items-center gap-2 px-4 py-2 bg-black/20 hover:bg-black/40 rounded-xl text-sm font-bold theme-text-soft hover:theme-text transition-all active:scale-95 border border-white/5 shadow-lg group">
+             <RefreshCw class="w-4 h-4 group-hover:rotate-180 transition-transform duration-700" />
+             Refresh Selection
+          </button>
         </div>
-        <button @click="refreshRecommendations" 
-          class="flex items-center gap-2 px-4 py-2 bg-black/20 hover:bg-black/40 rounded-xl text-sm font-bold theme-text-soft hover:theme-text transition-all active:scale-95 border border-white/5 shadow-lg">
-           <RefreshCw class="w-4 h-4" />
-           Refresh
-        </button>
+
+        <!-- Integrated Section Controls -->
+        <SectionControls
+          :genres="genres"
+          :activeGenre="activeGenre"
+          :activeSort="activeSort"
+          @update:genre="updateGenre"
+          @update:sort="updateSort"
+        />
       </div>
 
       <!-- Horizontal Scrollable Cover Flow -->
@@ -115,14 +167,14 @@ function scrollShelf(dir: 'left' | 'right') {
         <!-- Navigation Buttons -->
         <button 
           @click="scrollShelf('left')"
-          class="absolute left-0 top-1/2 -translate-y-1/2 z-20 p-4 bg-black/40 backdrop-blur-md text-[#E8D5A0] rounded-r-2xl border border-white/10 opacity-0 group-hover/nav:opacity-100 transition-opacity hover:bg-[#f02e65] hover:text-white"
+          class="absolute left-0 top-1/2 -translate-y-1/2 z-20 p-4 bg-black/40 backdrop-blur-md text-[#E8D5A0] rounded-r-2xl border border-white/10 opacity-0 group-hover/nav:opacity-100 transition-opacity hover:bg-[#AE0001] hover:text-white"
         >
           <ChevronRight class="w-6 h-6 rotate-180" />
         </button>
 
         <button 
           @click="scrollShelf('right')"
-          class="absolute right-0 top-1/2 -translate-y-1/2 z-20 p-4 bg-black/40 backdrop-blur-md text-[#E8D5A0] rounded-l-2xl border border-white/10 opacity-0 group-hover/nav:opacity-100 transition-opacity hover:bg-[#f02e65] hover:text-white"
+          class="absolute right-0 top-1/2 -translate-y-1/2 z-20 p-4 bg-black/40 backdrop-blur-md text-[#E8D5A0] rounded-l-2xl border border-white/10 opacity-0 group-hover/nav:opacity-100 transition-opacity hover:bg-[#AE0001] hover:text-white"
         >
           <ChevronRight class="w-6 h-6" />
         </button>
@@ -130,10 +182,10 @@ function scrollShelf(dir: 'left' | 'right') {
         <div 
           ref="scrollContainer"
           @wheel="handleWheel"
-          class="cover-flow-container overflow-x-auto overflow-y-visible pb-12 px-8 flex gap-8 snap-x snap-mandatory hide-scrollbar scroll-smooth"
+          class="cover-flow-container overflow-x-auto overflow-y-visible pb-12 px-8 flex gap-8 snap-x snap-mandatory hide-scrollbar scroll-smooth min-h-[400px]"
         >
           <div 
-            v-for="book in library.recommendedBooks" 
+            v-for="book in displayedBooks" 
             :key="book.$id"
             class="book-item group flex-shrink-0 snap-center first:pl-2 last:pr-12"
             @click="openBook(book)"
@@ -143,22 +195,22 @@ function scrollShelf(dir: 'left' | 'right') {
               <div class="absolute -bottom-4 left-1/2 -translate-x-1/2 w-[85%] h-6 bg-black/60 blur-xl opacity-0 group-hover:opacity-100 transition-opacity" />
               
               <!-- Book Cover -->
-              <div class="relative w-48 h-72 rounded-lg overflow-hidden shadow-[0_12px_40px_rgba(0,0,0,0.6)] border border-white/10 preserve-3d">
+              <div class="relative w-40 h-60 rounded-lg overflow-hidden shadow-[0_12px_40px_rgba(0,0,0,0.6)] border border-white/10 preserve-3d">
                 <img :src="book.cover_url" class="w-full h-full object-cover" />
                 <div class="absolute inset-0 bg-gradient-to-tr from-black/20 to-transparent opacity-40" />
                 <div class="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-20 transition-opacity" />
                 
                 <!-- Subtle binding detail -->
-                <div class="absolute inset-y-0 left-0 w-1.5 bg-black/30 border-r border-white/10" />
+                <div class="absolute inset-y-0 left-0 w-1 bg-black/30 border-r border-white/10" />
               </div>
 
               <!-- Magical Glow -->
-              <div class="absolute inset-0 -z-10 bg-[#f02e65]/20 blur-2xl opacity-0 group-hover:opacity-60 transition-opacity duration-700 rounded-full scale-75" />
+              <div class="absolute inset-0 -z-10 bg-[#AE0001]/20 blur-2xl opacity-0 group-hover:opacity-60 transition-opacity duration-700 rounded-full scale-75" />
             </div>
             
-            <div class="mt-6 text-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 transform translate-y-2 group-hover:translate-y-0">
-              <h4 class="text-[#E8D5A0] font-bold text-sm line-clamp-1 max-w-[192px]">{{ book.title }}</h4>
-              <p class="text-white/40 text-[10px] font-medium mt-1">{{ book.author }}</p>
+            <div class="mt-4 text-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 transform translate-y-2 group-hover:translate-y-0">
+              <h4 class="text-[#E8D5A0] font-bold text-xs line-clamp-1 max-w-[160px]">{{ book.title }}</h4>
+              <p class="text-white/40 text-[9px] font-medium mt-1">{{ book.author }}</p>
             </div>
           </div>
         </div>
@@ -185,9 +237,14 @@ function scrollShelf(dir: 'left' | 'right') {
               <div class="cover-glow" style="background: #3d2200" />
             </div>
             <div class="modal-meta">
-              <div class="modal-status-badge" :style="{ color: statusColor[selected.session?.status || 'unread'], borderColor: statusColor[selected.session?.status || 'unread'] + '40' }">
-                <CheckCircle2 class="w-3.5 h-3.5" />
-                {{ (selected.session?.status || 'unread').toUpperCase() }}
+              <div class="flex items-center justify-between w-full">
+                <div class="modal-status-badge" :style="{ color: statusColor[selected.session?.status || 'unread'], borderColor: statusColor[selected.session?.status || 'unread'] + '40' }">
+                  <CheckCircle2 class="w-3.5 h-3.5" />
+                  {{ (selected.session?.status || 'unread').toUpperCase() }}
+                </div>
+                <button @click="toggleFavorite" class="favorite-toggle" :class="{ 'is-active': selected.isLiked }">
+                  <Heart class="w-5 h-5" :fill="selected.isLiked ? '#f02e65' : 'none'" />
+                </button>
               </div>
               <h2 class="modal-title">{{ selected.book.title }}</h2>
               <p class="modal-author">by {{ selected.book.author }}</p>
@@ -207,7 +264,10 @@ function scrollShelf(dir: 'left' | 'right') {
 
           <div class="parchment-divider"><span>✦</span></div>
           <div class="modal-actions">
-            <button @click="closeModal" class="btn-secondary">Close</button>
+            <button @click="toggleFavorite" class="btn-secondary flex items-center justify-center gap-2">
+              <ArrowRight class="w-4 h-4" />
+              Add to Bookshelf
+            </button>
             <router-link :to="`/read/${selected.book.$id}`" @click="closeModal" class="btn-primary">
               <Play class="w-4 h-4 fill-current" />
               {{ selected.session?.status === 'reading' ? 'Continue Reading' : 'Start Reading' }}
@@ -258,10 +318,10 @@ function scrollShelf(dir: 'left' | 'right') {
 .modal-close:hover { color: #D4AF37; }
 .modal-header { display: flex; gap: 2rem; align-items: flex-start; }
 .modal-cover { width: 100px; height: 150px; object-fit: cover; border-radius: 8px; box-shadow: 0 15px 40px rgba(0,0,0,0.8); border: 1px solid rgba(212, 175, 55, 0.2); }
-.modal-title { font-size: 1.5rem; font-weight: 800; color: #E8D5A0; font-family: 'Playfair Display', serif; margin: 0.5rem 0; }
+.modal-title { font-size: 1.5rem; font-weight: 800; color: #E8D5A0; font-family: var(--font-cinzel), serif; margin: 0.5rem 0; }
 .modal-author { font-size: 0.9rem; color: rgba(200, 170, 100, 0.6); font-style: italic; }
 .modal-status-badge { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.7rem; font-weight: 800; border: 1px solid; border-radius: 100px; padding: 0.25rem 0.75rem; }
-.subject-tag { font-size: 0.65rem; font-weight: 700; padding: 0.25rem 0.75rem; border-radius: 100px; background: rgba(212, 175, 55, 0.1); color: rgba(212, 175, 55, 0.7); border: 1px solid rgba(212, 175, 55, 0.2); margin-top: 0.5rem; display: inline-block; }
+.subject-tag { font-size: 0.65rem; font-weight: 700; padding: 0.25rem 0.75rem; border-radius: 100px; background: rgba(174, 0, 1, 0.1); color: rgba(174, 0, 1, 0.7); border: 1px solid rgba(174, 0, 1, 0.2); margin-top: 0.5rem; display: inline-block; }
 .parchment-divider { text-align: center; margin: 1.5rem 0; color: rgba(212, 175, 55, 0.3); }
 .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; }
 .stat-cell { background: rgba(255,255,255,0.02); border: 1px solid rgba(212, 175, 55, 0.1); border-radius: 1rem; padding: 1rem; text-align: center; }
@@ -269,8 +329,13 @@ function scrollShelf(dir: 'left' | 'right') {
 .stat-label { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(200, 170, 100, 0.4); font-weight: 700; }
 .stat-value { font-size: 0.9rem; font-weight: 800; color: #D4B896; margin-top: 0.25rem; }
 .modal-actions { display: flex; gap: 1rem; margin-top: 1.5rem; }
-.btn-secondary { flex: 1; padding: 1rem; border-radius: 1rem; background: rgba(255,255,255,0.04); border: 1px solid rgba(212, 175, 55, 0.15); color: rgba(212, 175, 55, 0.6); font-weight: 700; cursor: pointer; }
-.btn-primary { flex: 2; display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 1rem; border-radius: 1rem; background: linear-gradient(135deg, #8B1A1A, #6B0D0D); color: #F0C040; font-weight: 800; text-decoration: none; box-shadow: 0 10px 30px rgba(139, 26, 26, 0.4); }
+.favorite-toggle { background: none; border: none; cursor: pointer; color: rgba(212, 175, 55, 0.4); transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.25); }
+.favorite-toggle.is-active { color: #AE0001; transform: scale(1.2); filter: drop-shadow(0 0 8px rgba(174, 0, 1, 0.4)); }
+.favorite-toggle:hover { color: #AE0001; transform: scale(1.1); }
+.btn-secondary { flex: 1.2; padding: 1rem; border-radius: 1rem; background: rgba(255,255,255,0.04); border: 1px solid rgba(212, 175, 55, 0.15); color: rgba(212, 175, 55, 0.8); font-weight: 700; cursor: pointer; transition: all 0.3s; }
+.btn-secondary:hover { background: rgba(255,255,255,0.08); border-color: #AE0001; color: #fff; }
+.btn-primary { flex: 2; display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 1rem; border-radius: 1rem; background: linear-gradient(135deg, #AE0001, #740001); color: #F0C040; font-weight: 800; text-decoration: none; box-shadow: 0 10px 30px rgba(139, 26, 26, 0.4); transition: all 0.3s; }
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 15px 35px rgba(174, 0, 1, 0.4); filter: brightness(1.1); }
 .modal-fade-enter-active { animation: modalIn 0.4s ease-out; }
 @keyframes modalIn { from { opacity: 0; transform: scale(0.9) translateY(20px); } to { opacity: 1; transform: scale(1) translateY(0); } }
 </style>

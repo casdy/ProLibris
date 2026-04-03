@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useLibraryStore } from '@/stores/library'
 import { useReaderStore } from '@/stores/reader'
@@ -7,7 +7,7 @@ import { useUIStore } from '@/stores/ui'
 import { storage, BUCKET_ID } from '@/lib/appwrite'
 import ePub from 'epubjs'
 import ReaderLayout from '@/components/reader/ReaderLayout.vue'
-import { X, Settings, Moon, Sun, Type } from 'lucide-vue-next'
+import { X, Settings, Moon, Sun, Type, Loader2 } from 'lucide-vue-next'
 
 const route = useRoute()
 const router = useRouter()
@@ -26,7 +26,7 @@ const epubData = ref<ArrayBuffer | null>(null)
 const initialCfi = ref<string | undefined>(undefined)
 
 // Debounced save progress
-let saveTimeout: any = null
+let saveTimeout: ReturnType<typeof setTimeout> | null = null
 const saveProgress = (cfi: string) => {
   if (saveTimeout) clearTimeout(saveTimeout)
   saveTimeout = setTimeout(() => {
@@ -36,9 +36,32 @@ const saveProgress = (cfi: string) => {
 
 const initializeReader = async () => {
   try {
+    const source = route.query.source as string
+    const gutenbergId = parseInt(bookId, 10)
+
+    // 1. Handle Automatic Import for Gutendex (Public) books
+    if (source === 'gutendex' && !isNaN(gutenbergId)) {
+      console.log('Detected Public Book. Summoning to Private Archive...')
+      loading.value = true
+      
+      const importedBook = await library.importBookFromGutenberg(gutenbergId, {
+        title: (route.query.title as string) || 'Summoned Tome',
+        author: (route.query.author as string) || 'Ancient Author'
+      })
+
+      if (!importedBook) {
+        throw new Error('Failed to summon book from the Gutenberg Archive.')
+      }
+
+      window.location.href = `/read/${importedBook.$id}`
+      return
+    }
+
+    // 2. Normal Local Appwrite Reading
     if (!bookMetadata.value) {
       await library.fetchBooks()
-      bookMetadata.value = library.books.find(b => b.$id === bookId) || library.allBooks.find(b => b.$id === bookId)
+      bookMetadata.value = library.books.find(b => b.$id === bookId) || 
+                           library.allBooks.find(b => b.$id === bookId)
     }
 
     if (!bookMetadata.value) {
@@ -47,29 +70,27 @@ const initializeReader = async () => {
       return
     }
 
-    // Download EPUB as ArrayBuffer
+    // 3. Download EPUB as ArrayBuffer from Appwrite
     const fileUrl = storage.getFileDownload(BUCKET_ID, bookMetadata.value.file_id).toString()
-    console.log('Downloading EPUB from:', fileUrl)
+    console.log('Streaming archival EPUB from:', fileUrl)
 
     const response = await fetch(fileUrl, {
       mode: 'cors',
       credentials: 'include',
     })
+    
     if (!response.ok) {
-      throw new Error(
-        `EPUB download failed (${response.status}). File ID: ${bookMetadata.value.file_id}`,
-      )
+      throw new Error(`EPUB download failed (${response.status}). Archive ID: ${bookMetadata.value.file_id}`)
     }
+    
     epubData.value = await response.arrayBuffer()
 
-    // Restore progress
+    // 4. Restore progress and settings
     await library.fetchUserSessions()
-    const session = library.sessions.find(s => s.book_id === bookId)
+    const session = library.sessions.find(s => s.book_id === bookMetadata.value?.$id || bookId)
     if (session?.progress_cfi) {
       initialCfi.value = session.progress_cfi
     }
-
-    // Restore mode preference if saved
     if (session?.mode_preference) {
       reader.activeMode = session.mode_preference
     }
@@ -77,23 +98,26 @@ const initializeReader = async () => {
       reader.targetWpm = session.target_read_wpm
     }
 
-    // Initialize the reader store with book info
-    reader.bookId = bookId
-
-    // Pre-parse the book for spine info and text extraction
+    // 5. Common Initialization
+    const finalBookId = bookMetadata.value?.$id || bookId
+    reader.bookId = finalBookId
     const book = ePub(epubData.value)
     await book.ready
-    await reader.initBook(book, bookId)
+    await reader.initBook(book, finalBookId)
+    await reader.extractCurrentChapter()
 
-    // If starting in non-standard mode, extract the chapter
-    if (reader.activeMode !== 'standard') {
-      await reader.extractCurrentChapter()
+    if (reader.activeMode === 'typing') {
+      reader.resetTypingState()
+      reader.startWpmSampling()
+    } else if (reader.activeMode === 'paced') {
+      reader.resetPacedState()
     }
 
     loading.value = false
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('Reader init error:', e)
-    error.value = `Failed to load book: ${e.message || e}`
+    const msg = e instanceof Error ? e.message : String(e)
+    error.value = `Failed to load book: ${msg}`
     loading.value = false
   }
 }
@@ -171,8 +195,26 @@ onUnmounted(() => {
         :initial-cfi="initialCfi"
         :is-dark="isDark"
         :font-size="fontSize"
+        @error="msg => (error = msg)"
         @relocated="onRelocated"
+        @update-font-size="s => (fontSize = s)"
       />
+
+      <!-- Catch-all fallback for unexpected blank states -->
+      <div v-else class="absolute inset-0 flex flex-col items-center justify-center bg-inherit z-50 gap-4 p-8 text-center animate-pulse">
+        <Loader2 class="w-10 h-10 text-[#AE0001] animate-spin mb-2" />
+        <p class="font-bold theme-text opacity-80">Wait... the tome is still manifesting...</p>
+        <p class="text-[10px] opacity-40 max-w-sm uppercase tracking-widest leading-relaxed">
+          The ProLibris engine is preparing your private archival copy. 
+          If the parchment remains empty, please return to the dashboard.
+        </p>
+        <button
+          @click="router.push('/dashboard')"
+          class="mt-4 px-6 py-2 bg-black/5 dark:bg-white/5 rounded-xl text-xs font-black uppercase tracking-widest opacity-60 hover:opacity-100 transition-all border theme-border"
+        >
+          Return to Dashboard
+        </button>
+      </div>
     </main>
 
     <!-- Settings Overlay -->

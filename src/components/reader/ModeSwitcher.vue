@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useReaderStore, type ReadingMode } from '@/stores/reader'
-import { BookOpen, Keyboard, Zap } from 'lucide-vue-next'
+import { BookOpen, Keyboard } from 'lucide-vue-next'
 import { computed, ref } from 'vue'
 
 const reader = useReaderStore()
@@ -8,7 +8,6 @@ const reader = useReaderStore()
 const modes: { key: ReadingMode; label: string; icon: any }[] = [
   { key: 'standard', label: 'Standard', icon: BookOpen },
   { key: 'typing', label: 'Typing', icon: Keyboard },
-  { key: 'paced', label: 'Paced', icon: Zap },
 ]
 
 const activeIdx = computed(() => modes.findIndex(m => m.key === reader.activeMode))

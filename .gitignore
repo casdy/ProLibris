@@ -26,12 +26,32 @@ coverage
 *.njsproj
 *.sln
 *.sw?
+*.bak
 
+# Windows System Files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Tooling and Caches
+.eslintcache
+.vscode-test
 *.tsbuildinfo
+
+# Sensitive Environment Files
 .env
 .env.local
 .env.*.local
 
-# Development Scripts
+# Development Scripts (Ignored because they contain secret API keys)
 scripts/seed.ts
 scripts/migrate-schema.ts
+scripts/*.local.ts
+
+# AI Tooling & Assistants
+.gemini/
+.agents/
+.agent/
+.aider*
+.cursor/
+.windsurf/

@@ -5,10 +5,12 @@ import {
   extractChapterText,
   tokenizeWords,
   tokenizeChars,
+  tokenizeSentences,
   type ExtractedChapter,
   type WordToken,
   type CharToken,
   type CharStatus,
+  type SentenceToken,
 } from '@/lib/textExtractor'
 
 export type ReadingMode = 'standard' | 'typing' | 'paced'
@@ -49,6 +51,7 @@ export const useReaderStore = defineStore('reader', {
     activeMode: 'standard' as ReadingMode,
 
     // Book reference
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     bookInstance: null as any,
     bookId: '',
 
@@ -64,10 +67,14 @@ export const useReaderStore = defineStore('reader', {
 
     // Paced mode state
     wordTokens: [] as WordToken[],
+    sentences: [] as SentenceToken[],
     currentWordIndex: 0,
+    currentSentenceIndex: 0,
     targetWpm: 250,
     isPlaying: false,
     pacedTimerId: null as ReturnType<typeof setInterval> | null,
+    isSpeedReadOverlayOpen: false,
+    lastVisibleText: '',
 
     // Analytics
     sessionStats: createEmptyStats(),
@@ -148,6 +155,9 @@ export const useReaderStore = defineStore('reader', {
         if (this.chapterData) {
           this.wordTokens = tokenizeWords(this.chapterData.paragraphs)
           this.charTokens = tokenizeChars(this.chapterData.paragraphs)
+          this.sentences = tokenizeSentences(this.chapterData.paragraphs)
+          
+          // Synthesis will be handled by PuterStore in the component
         }
       } catch (e) {
         console.error('Failed to extract chapter text:', e)
@@ -232,7 +242,7 @@ export const useReaderStore = defineStore('reader', {
 
       // Track key accuracy
       const expectedChar = currentToken.isNewline ? 'Enter' : currentToken.char
-      const typedKey = currentToken.isNewline ? event.key : event.key
+      // const typedKey = currentToken.isNewline ? event.key : event.key
 
       if (!this.errorMap[expectedChar]) {
         this.errorMap[expectedChar] = { total: 0, errors: 0 }
@@ -296,23 +306,22 @@ export const useReaderStore = defineStore('reader', {
 
     startPacedReading() {
       if (this.isPlaying) return
+
+      // Guard: don't start if there's nothing to read
+      if (this.wordTokens.length === 0) {
+        console.warn('No word tokens to read — skipping playback.')
+        return
+      }
+
       this.isPlaying = true
 
       if (this.sessionStats.startTime === null) {
         this.sessionStats.startTime = Date.now()
       }
 
-      const msPerWord = 60000 / this.targetWpm
-
-      this.pacedTimerId = setInterval(() => {
-        if (this.currentWordIndex < this.wordTokens.length - 1) {
-          this.currentWordIndex++
-          this.updatePacedProgress()
-        } else {
-          this.stopPacedReading()
-          this.onChapterComplete()
-        }
-      }, msPerWord)
+      // Visual pacing logic is now handled in the component
+      // for more precise UI synchronization, but we'll maintain the store's
+      // isPlaying state for global control.
     },
 
     stopPacedReading() {
@@ -339,12 +348,6 @@ export const useReaderStore = defineStore('reader', {
 
     setTargetWpm(wpm: number) {
       this.targetWpm = Math.max(50, Math.min(1000, wpm))
-
-      // If currently playing, restart timer with new speed
-      if (this.isPlaying) {
-        this.stopPacedReading()
-        this.startPacedReading()
-      }
     },
 
     updatePacedProgress() {
@@ -415,6 +418,19 @@ export const useReaderStore = defineStore('reader', {
     },
 
     async onChapterComplete() {
+      // Guard: only show completion if a meaningful reading session occurred
+      const minReadingTime = 2000 // 2 seconds
+      const minWordsRead = 5
+      
+      const sessionDuration = Date.now() - (this.sessionStats.startTime || Date.now())
+      const wordsRead = this.activeMode === 'typing' ? this.currentCharIndex / 5 : this.currentWordIndex
+
+      if (sessionDuration < minReadingTime || wordsRead < minWordsRead) {
+        this.stopPacedReading()
+        this.stopWpmSampling()
+        return
+      }
+
       this.stopPacedReading()
       this.stopWpmSampling()
 
@@ -455,10 +471,59 @@ export const useReaderStore = defineStore('reader', {
       }
     },
 
+    toggleSpeedReadOverlay() {
+      this.isSpeedReadOverlayOpen = !this.isSpeedReadOverlayOpen
+      
+      if (this.isSpeedReadOverlayOpen) {
+        // Automatically start focus session with the last known visible text
+        if (this.lastVisibleText && this.lastVisibleText.trim().length > 0) {
+          this.startFocusSession(this.lastVisibleText)
+        }
+        this.isPlaying = true
+      } else {
+        this.stopPacedReading()
+      }
+    },
+
+    startFocusSession(text: string) {
+      if (!text) return
+      // Split text into paragraphs to match tokenizer requirements
+      const paragraphs = text.split(/\n+/).filter(p => p.trim().length > 0)
+      
+      this.wordTokens = tokenizeWords(paragraphs)
+      this.sentences = tokenizeSentences(paragraphs)
+      this.currentWordIndex = 0
+      this.currentSentenceIndex = 0
+    },
+
+    setLastVisibleText(text: string) {
+      if (!text) return
+      this.lastVisibleText = text
+      
+      // If Focus Mode is already open, instantly refresh the session with the new page text
+      if (this.isSpeedReadOverlayOpen) {
+        this.startFocusSession(text)
+      }
+    },
+
+    // ─── Seamless Handoff Logic ──────────────────────────────
+    syncSpeedReadToCfi(cfi: string) {
+      if (!this.wordTokens.length) return
+      console.log(`Syncing Speed Read to CFI: ${cfi}`)
+      
+      // Simple implementation: Reset to start of current chapter tokens
+      this.currentWordIndex = 0
+      this.currentSentenceIndex = 0
+    },
+
+    // ─── Puter.js Helpers Removed ────────────────────────────
+
+
     // ─── CLEANUP ────────────────────────────────────────────────
     cleanup() {
       this.stopPacedReading()
       this.stopWpmSampling()
+      
       this.bookInstance = null
       this.chapterData = null
       this.charTokens = []
@@ -466,6 +531,7 @@ export const useReaderStore = defineStore('reader', {
       this.spineItems = []
       this.resetSessionStats()
     },
+
   },
 })
 

@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { useReaderStore } from '@/stores/reader'
 import { useRouter } from 'vue-router'
+import { ref } from 'vue'
 import ModeSwitcher from './ModeSwitcher.vue'
 import ReadingHUD from './ReadingHUD.vue'
 import StandardEngine from './StandardEngine.vue'
 import TypingEngine from './TypingEngine.vue'
-import PacedEngine from './PacedEngine.vue'
+import SpeedReadEngine from './SpeedReadEngine.vue'
 import AnalyticsModal from './AnalyticsModal.vue'
 import { ChevronLeft, ChevronRight } from 'lucide-vue-next'
+import type { Book } from 'epubjs'
 
-const props = defineProps<{
+defineProps<{
   bookData: ArrayBuffer
   initialCfi?: string
   isDark: boolean
@@ -18,12 +20,15 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   relocated: [cfi: string]
+  error: [message: string]
+  'update-font-size': [size: number]
 }>()
 
 const router = useRouter()
 const reader = useReaderStore()
+const standardEngine = ref<InstanceType<typeof StandardEngine> | null>(null)
 
-const onSpineLoaded = (book: any) => {
+const onSpineLoaded = (book: Book) => {
   reader.initBook(book, '')
 }
 
@@ -38,6 +43,13 @@ const handleNextChapter = async () => {
 
 const handleBackToDashboard = () => {
   router.push('/dashboard')
+}
+
+const handlePageComplete = () => {
+  if (standardEngine.value) {
+    console.log('Focus page complete, advancing...')
+    standardEngine.value.nextPage()
+  }
 }
 </script>
 
@@ -84,24 +96,41 @@ const handleBackToDashboard = () => {
       <!-- Standard Mode -->
       <StandardEngine
         v-if="reader.activeMode === 'standard'"
+        ref="standardEngine"
         :book-data="bookData"
         :initial-cfi="initialCfi"
         :is-dark="isDark"
         :font-size="fontSize"
         @relocated="onRelocated"
         @spine-loaded="onSpineLoaded"
+        @error="e => emit('error', e)"
       />
 
       <!-- Typing Mode -->
       <TypingEngine
         v-else-if="reader.activeMode === 'typing'"
       />
-
-      <!-- Paced Mode -->
-      <PacedEngine
-        v-else-if="reader.activeMode === 'paced'"
-      />
     </div>
+
+    <!-- Speed Read Focus Overlay (Seamless Integration) -->
+    <Transition name="overlay">
+      <div v-if="reader.isSpeedReadOverlayOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-8">
+        <!-- Backdrop Backdrop -->
+        <div 
+          class="absolute inset-0 bg-[#0d0702]/85 backdrop-blur-2xl"
+          @click="reader.toggleSpeedReadOverlay()"
+        />
+        
+        <!-- Engine Content -->
+        <div class="relative w-full h-full max-w-5xl bg-white/2 dark:bg-black/2 rounded-3xl border theme-border shadow-2xl overflow-hidden animate-overlay-in">
+          <SpeedReadEngine 
+            :font-size="fontSize"
+            @page-complete="handlePageComplete" 
+            @update-font-size="s => emit('update-font-size', s)"
+          />
+        </div>
+      </div>
+    </Transition>
 
     <!-- Analytics Modal -->
     <AnalyticsModal
@@ -110,3 +139,26 @@ const handleBackToDashboard = () => {
     />
   </div>
 </template>
+
+<style scoped>
+.overlay-enter-active,
+.overlay-leave-active {
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.overlay-enter-from,
+.overlay-leave-to {
+  opacity: 0;
+  transform: scale(1.05);
+  backdrop-filter: blur(0px);
+}
+
+@keyframes overlay-in {
+  from { opacity: 0; transform: translateY(20px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.animate-overlay-in {
+  animation: overlay-in 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+</style>

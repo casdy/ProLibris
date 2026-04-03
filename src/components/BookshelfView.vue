@@ -1,15 +1,13 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useLibraryStore } from '@/stores/library'
-import { useRouter } from 'vue-router'
 import {
-  X, BookOpen, Clock, BarChart2, Heart, Target,
-  Zap, ChevronRight, Bookmark, CheckCircle2, Play,
+  X, BookOpen, Clock, Heart,
+  Zap, ChevronRight, CheckCircle2, Play,
   Keyboard, Star
 } from 'lucide-vue-next'
 
 const library = useLibraryStore()
-const router  = useRouter()
 
 // ─── Palette ─────────────────────────────────────────────────────
 const SPINE_PALETTES = [
@@ -50,14 +48,33 @@ function spineStyle(title: string, idx: number) {
 }
 
 interface ShelfEntry {
-  book: any
-  session: any
-  style: any
+  book: {
+    $id: string
+    title: string
+    author: string
+    cover_url?: string
+    subjects?: string[]
+  }
+  session: {
+    status?: string
+    last_read_at?: string
+    pages_turned?: number
+    mode_preference?: string
+    avg_type_wpm?: number
+    avg_accuracy?: number
+    is_liked?: boolean
+    progress_cfi?: string
+  } | undefined
+  style: {
+    palette: { bg: string; text: string; accent: string }
+    height: number
+    width: number
+  }
   isLiked: boolean
   isReading: boolean
 }
 
-function getEntriesForBooks(books: any[]) {
+function getEntriesForBooks(books: { $id: string; title: string; author: string; [key: string]: any }[]): ShelfEntry[] {
   return books.map((book, idx) => {
     const session = library.sessions.find(s => s.book_id === book.$id)
     return {
@@ -114,7 +131,7 @@ function modeInfo(mode?: string) {
 
 const statusColor: Record<string, string> = {
   completed: '#22c55e',
-  reading:   '#f02e65',
+  reading:   '#AE0001',
   unread:    '#6b7280',
 }
 
@@ -122,7 +139,7 @@ const statusColor: Record<string, string> = {
 const scrollContainers = ref<Record<string, HTMLElement | null>>({})
 
 function setScrollRef(key: string, el: any) {
-  scrollContainers.value[key] = el
+  if (el) scrollContainers.value[key] = el as HTMLElement
 }
 
 function handleWheel(e: WheelEvent, key: string) {
@@ -286,7 +303,7 @@ function scrollShelf(key: string, dir: 'left' | 'right') {
           <div class="stat-cell"><component :is="modeInfo(selected.session?.mode_preference).icon" class="stat-icon" :style="{ color: modeInfo(selected.session?.mode_preference).color }" /><p class="stat-label">Reading Mode</p><p class="stat-value">{{ modeInfo(selected.session?.mode_preference).label }}</p></div>
           <div class="stat-cell"><Star class="stat-icon" /><p class="stat-label">Liked</p><p class="stat-value">{{ selected.isLiked ? '♥ Yes' : '—' }}</p></div>
           <template v-if="selected.session?.avg_type_wpm">
-            <div class="stat-cell"><Zap class="stat-icon" style="color:#f02e65" /><p class="stat-label">Avg WPM</p><p class="stat-value">{{ selected.session.avg_type_wpm }}</p></div>
+            <div class="stat-cell"><Zap class="stat-icon" style="color:#AE0001" /><p class="stat-label">Avg WPM</p><p class="stat-value">{{ selected.session.avg_type_wpm }}</p></div>
             <div class="stat-cell"><Target class="stat-icon" style="color:#22c55e" /><p class="stat-label">Accuracy</p><p class="stat-value">{{ selected.session.avg_accuracy }}%</p></div>
           </template>
         </div>
@@ -322,7 +339,7 @@ function scrollShelf(key: string, dir: 'left' | 'right') {
 }
 .shelves-container { position: relative; z-index: 1; display: flex; flex-direction: column; }
 .shelf-deck { display: flex; flex-direction: column; gap: 0; }
-.deck-title { font-family: 'Playfair Display', serif; font-size: 1.5rem; font-weight: 800; color: #D4B896; text-shadow: 0 4px 12px rgba(0,0,0,0.6); margin-bottom: 0.5rem; padding-left: 1.5rem; opacity: 0.9; letter-spacing: 0.02em; }
+.deck-title { font-family: var(--font-cinzel), serif; font-size: 1.5rem; font-weight: 800; color: #D4B896; text-shadow: 0 4px 12px rgba(0,0,0,0.6); margin-bottom: 0.5rem; padding-left: 1.5rem; opacity: 0.9; letter-spacing: 0.02em; }
 .shelf-row { display: flex; flex-direction: column; margin-bottom: 0; }
 .nav-btn { position: absolute; top: 1.5rem; bottom: 22px; z-index: 20; width: 3.5rem; background: rgba(5, 2, 1, 0.4); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; color: #D4AF37; opacity: 0; transition: all 0.3s ease; border: 1px solid rgba(212, 175, 55, 0.1); cursor: pointer; }
 .group\/nav:hover .nav-btn { opacity: 1; }
@@ -339,8 +356,8 @@ function scrollShelf(key: string, dir: 'left' | 'right') {
 .spine-title { writing-mode: vertical-rl; text-orientation: mixed; transform: rotate(180deg); font-size: 10px; font-weight: 700; letter-spacing: 0.05em; line-height: 1.2; text-align: center; padding: 6px 3px; max-height: 90%; overflow: hidden; text-shadow: 0 1px 3px rgba(0,0,0,0.8); font-family: 'Outfit', serif; }
 .spine-band { position: absolute; top: 18px; left: 0; right: 0; height: 3px; opacity: 0.6; }
 .spine-glow { position: absolute; inset: 0; pointer-events: none; }
-.reading-glow { box-shadow: inset 0 0 12px rgba(240, 46, 101, 0.3); animation: readingPulse 2.5s ease-in-out infinite; }
-.liked-glow { box-shadow: inset 0 0 10px rgba(255, 200, 0, 0.2); }
+.reading-glow { box-shadow: inset 0 0 12px rgba(174, 0, 1, 0.4); animation: readingPulse 2.5s ease-in-out infinite; }
+.liked-glow { box-shadow: inset 0 0 10px rgba(238, 186, 48, 0.25); }
 @keyframes readingPulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
 .spine-badges { position: absolute; bottom: 6px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .spine-badge { font-size: 8px; opacity: 0.8; line-height: 1; }
@@ -354,7 +371,7 @@ function scrollShelf(key: string, dir: 'left' | 'right') {
 .cover-glow { position: absolute; inset: -4px; border-radius: 10px; opacity: 0.4; filter: blur(16px); z-index: -1; }
 .modal-meta { flex: 1; min-width: 0; }
 .modal-status-badge { display: inline-flex; align-items: center; gap: 0.375rem; font-size: 0.65rem; font-weight: 800; letter-spacing: 0.12em; border: 1px solid; border-radius: 100px; padding: 0.2rem 0.75rem; margin-bottom: 0.6rem; }
-.modal-title { font-size: 1.2rem; font-weight: 800; line-height: 1.3; color: #E8D5A0; margin-bottom: 0.25rem; font-family: 'Playfair Display', serif; text-shadow: 0 2px 8px rgba(0,0,0,0.6); }
+.modal-title { font-size: 1.2rem; font-weight: 800; line-height: 1.3; color: #E8D5A0; margin-bottom: 0.25rem; font-family: var(--font-cinzel), serif; text-shadow: 0 2px 8px rgba(0,0,0,0.6); }
 .modal-author { font-size: 0.8rem; color: rgba(200, 170, 100, 0.6); font-style: italic; margin-bottom: 0.75rem; }
 .modal-subjects { display: flex; flex-wrap: wrap; gap: 0.375rem; }
 .subject-tag { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; padding: 0.2rem 0.6rem; border-radius: 100px; background: rgba(212, 175, 55, 0.1); color: rgba(212, 175, 55, 0.7); border: 1px solid rgba(212, 175, 55, 0.2); }

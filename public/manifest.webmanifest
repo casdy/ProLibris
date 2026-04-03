@@ -1,0 +1,21 @@
+{
+  "name": "ProLibris",
+  "short_name": "ProLibris",
+  "description": "Premium Cloud EPUB Reader with Magical Owl AI.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FDFCFB",
+  "theme_color": "#AE0001",
+  "icons": [
+    {
+      "src": "/logo-owl.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/logo-owl.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
