@@ -91,10 +91,10 @@ const applyStyles = () => {
   if (!renditionInstance) return
   renditionInstance.themes.fontSize(`${props.fontSize}%`)
   renditionInstance.themes.register('dark', {
-    body: { background: '#0d0702 !important', color: '#EBEBEF !important', 'font-family': 'Outfit, sans-serif !important' },
+    body: { background: '#0d0702 !important', color: '#EBEBEF !important', 'font-family': 'Outfit, sans-serif !important', 'padding': '2rem !important' },
   })
   renditionInstance.themes.register('light', {
-    body: { background: '#1a0f05 !important', color: '#E8D5A0 !important', 'font-family': 'Outfit, sans-serif !important' },
+    body: { background: '#F9F1E7 !important', color: '#2F2F2F !important', 'font-family': 'Outfit, sans-serif !important', 'padding': '2rem !important' },
   })
   renditionInstance.themes.select(props.isDark ? 'dark' : 'light')
 }
@@ -125,16 +125,23 @@ defineExpose({ prevPage, nextPage })
 
     <!-- Navigation Arrows -->
     <button
-      @click="prevPage"
-      class="absolute left-2 lg:left-6 top-1/2 -translate-y-1/2 p-3 bg-white/10 backdrop-blur-md rounded-full shadow-2xl hover:bg-[#f02e65] hover:text-white transition-all transform active:scale-95 group"
+      @pointerdown.prevent="prevPage"
+      class="absolute left-0 lg:left-4 top-0 bottom-0 w-16 lg:w-20 flex items-center justify-center bg-transparent hover:bg-black/5 dark:hover:bg-white/5 transition-all group z-10"
+      style="touch-action: manipulation;"
     >
-      <ChevronLeft class="w-6 h-6 group-hover:-translate-x-0.5 transition-transform" />
+      <div class="p-3 bg-white/10 dark:bg-black/20 backdrop-blur-md rounded-full shadow-2xl group-hover:bg-[#f02e65] group-hover:text-white transition-all transform active:scale-90">
+        <ChevronLeft class="w-6 h-6 group-hover:-translate-x-0.5 transition-transform" />
+      </div>
     </button>
+    
     <button
-      @click="nextPage"
-      class="absolute right-2 lg:right-6 top-1/2 -translate-y-1/2 p-3 bg-white/10 backdrop-blur-md rounded-full shadow-2xl hover:bg-[#f02e65] hover:text-white transition-all transform active:scale-95 group"
+      @pointerdown.prevent="nextPage"
+      class="absolute right-0 lg:right-4 top-0 bottom-0 w-16 lg:w-20 flex items-center justify-center bg-transparent hover:bg-black/5 dark:hover:bg-white/5 transition-all group z-10"
+      style="touch-action: manipulation;"
     >
-      <ChevronRight class="w-6 h-6 group-hover:translate-x-0.5 transition-transform" />
+      <div class="p-3 bg-white/10 dark:bg-black/20 backdrop-blur-md rounded-full shadow-2xl group-hover:bg-[#f02e65] group-hover:text-white transition-all transform active:scale-90">
+        <ChevronRight class="w-6 h-6 group-hover:translate-x-0.5 transition-transform" />
+      </div>
     </button>
 
     <!-- Speed Read Floating Toggle -->

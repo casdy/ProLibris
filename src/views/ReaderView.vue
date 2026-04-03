@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 import { useLibraryStore } from '@/stores/library'
 import { useReaderStore } from '@/stores/reader'
 import { useUIStore } from '@/stores/ui'
@@ -11,6 +11,7 @@ import { X, Settings, Moon, Sun, Type, Loader2 } from 'lucide-vue-next'
 
 const route = useRoute()
 const router = useRouter()
+const auth = useAuthStore()
 const library = useLibraryStore()
 const reader = useReaderStore()
 const ui = useUIStore()
@@ -61,24 +62,18 @@ const saveProgress = (cfi: string) => {
 
 const initializeReader = async () => {
   try {
+    // 1. Initial Verification & Auth Check
+    await auth.refreshUser()
+    if (!auth.isVerified) {
+      error.value = 'Archival Access Restricted: Your identity must be verified via parchment (email) to access this tome.'
+      loading.value = false
+      return
+    }
+
     const source = route.query.source as string
-    const gutenbergId = parseInt(bookId, 10)
-
-    // 1. Handle Automatic Import for Gutendex (Public) books
-    if (source === 'gutendex' && !isNaN(gutenbergId)) {
-      console.log('Detected Public Book. Summoning to Private Archive...')
-      loading.value = true
-      
-      const importedBook = await library.importBookFromGutenberg(gutenbergId, {
-        title: (route.query.title as string) || 'Summoned Tome',
-        author: (route.query.author as string) || 'Ancient Author'
-      })
-
-      if (!importedBook) {
-        throw new Error('Failed to summon book from the Gutenberg Archive.')
-      }
-
-      window.location.href = `/read/${importedBook.$id}`
+    if (source === 'gutendex') {
+      error.value = 'Direct Gutenberg links are no longer manifested. Please summon books via the Archive first.'
+      loading.value = false
       return
     }
 
@@ -105,6 +100,13 @@ const initializeReader = async () => {
     })
     
     if (!response.ok) {
+      if (response.status === 404) {
+        const missingId = bookMetadata.value.file_id
+        if (missingId === '69cc8c220a6791207b') {
+          throw new Error('Archive Sync Error: The requested tome (ID: 69cc8c2...07b) has lost its physical manifestation in the cloud bucket. Please contact the Archivist.')
+        }
+        throw new Error(`Cloud Storage 404: The physical EPUB file (ID: ${missingId}) is missing from the archive storage bucket.`)
+      }
       throw new Error(`EPUB download failed (${response.status}). Archive ID: ${bookMetadata.value.file_id}`)
     }
     

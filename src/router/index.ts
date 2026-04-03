@@ -40,7 +40,38 @@ const router = createRouter({
       path: '/read/:id',
       name: 'reader',
       component: () => import('@/views/ReaderView.vue'),
+      meta: { requiresAuth: true, requiresVerification: true },
+    },
+    {
+      path: '/verify-pending',
+      name: 'verify-pending',
+      component: () => import('@/views/VerificationPending.vue'),
       meta: { requiresAuth: true },
+    },
+    {
+      path: '/verify-complete',
+      name: 'verify-complete',
+      component: () => import('@/views/VerificationPending.vue'), // Re-use for simplicity or create new
+      meta: { requiresAuth: true },
+      beforeEnter: async (to, from, next) => {
+        const auth = useAuthStore()
+        const urlParams = new URLSearchParams(window.location.search)
+        const userId = urlParams.get('userId')
+        const secret = urlParams.get('secret')
+        
+        if (userId && secret) {
+          try {
+            const { account } = await import('@/lib/appwrite')
+            await account.updateVerification(userId, secret)
+            await auth.refreshUser()
+            next('/dashboard')
+            return
+          } catch (e) {
+            console.error('Verification failed:', e)
+          }
+        }
+        next('/verify-pending')
+      }
     },
     // Fallback for unmatched routes to prevent blank screens
     {
@@ -58,6 +89,8 @@ router.beforeEach(async (to, from, next) => {
     next('/login')
   } else if (to.path === '/login' && auth.user) {
     next('/dashboard')
+  } else if (to.meta.requiresVerification && !auth.isVerified && to.path !== '/verify-pending') {
+    next('/verify-pending')
   } else {
     next()
   }

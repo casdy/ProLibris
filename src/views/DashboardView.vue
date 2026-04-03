@@ -40,8 +40,13 @@ const clearSearch = () => {
   catalog.updateFilters({ search: '' })
 }
 
-onMounted(() => {
-  // Library and session data are now pre-fetched by UI initializePlatform
+onMounted(async () => {
+  // Ensure we have the latest verification status
+  await auth.refreshUser()
+  
+  if (!auth.isVerified) {
+    ui.showNotification('Verification required to access the archival library.', 'info')
+  }
 })
 
 const stats = computed(() => {
@@ -239,7 +244,25 @@ function formatDate(dateStr?: string) {
       </section>
 
         <!-- Bookstore / Book Grid -->
-        <section class="space-y-12">
+        <section class="space-y-12 relative">
+          <!-- Verification Overlay -->
+          <div v-if="!auth.isVerified" class="absolute inset-0 z-20 backdrop-blur-md bg-white/5 dark:bg-black/20 rounded-[2.5rem] flex flex-col items-center justify-center p-8 text-center border-2 border-dashed theme-border animate-fade-in">
+             <div class="p-6 bg-[#AE0001]/10 rounded-full mb-6">
+                <CheckCircle2 class="w-12 h-12 text-[#AE0001] opacity-50" />
+             </div>
+             <h3 class="text-2xl font-black theme-text font-cinzel mb-2 uppercase tracking-widest text-[#EEBA30]">Seal of Verification Required</h3>
+             <p class="text-sm theme-text-soft max-w-md mb-8 leading-relaxed">
+                To protect the sanctity of the ProLibris archive, we require all Seekers to verify their identity via parchment (email). 
+                Once verified, the full collection will be manifested for you.
+             </p>
+             <button 
+               @click="router.push('/verify-pending')"
+               class="px-8 py-4 bg-[#AE0001] text-white rounded-2xl font-black uppercase tracking-[0.2em] shadow-xl shadow-[#AE0001]/30 hover:scale-105 active:scale-95 transition-all text-xs"
+             >
+                Claim Verification
+             </button>
+          </div>
+
           <!-- Section Header -->
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-6 pr-2">
             <div class="flex items-center gap-4">

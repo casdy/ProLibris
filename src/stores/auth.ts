@@ -7,7 +7,17 @@ export const useAuthStore = defineStore('auth', {
     user: null as Models.User<Models.Preferences> | null,
     loading: true,
   }),
+  getters: {
+    isVerified: (state) => state.user?.emailVerification ?? false,
+  },
   actions: {
+    async refreshUser() {
+      try {
+        this.user = await account.get()
+      } catch (err) {
+        this.user = null
+      }
+    },
     async init() {
       try {
         this.user = await account.get()
@@ -29,5 +39,9 @@ export const useAuthStore = defineStore('auth', {
       await account.deleteSession('current')
       this.user = null
     },
+    async sendVerification() {
+      const url = `${window.location.origin}/verify-complete`
+      await account.createVerification(url)
+    }
   },
 })

@@ -73,41 +73,7 @@ const mapBook = (doc: Book): HybridBook => ({
   appwriteFileId: doc.file_id
 })
 
-const mapGutendextoHybrid = (gb: { 
-  id: number; 
-  title: string; 
-  authors: { name: string }[]; 
-  formats: Record<string, string>; 
-  subjects: string[] 
-}): HybridBook => ({
-  id: gb.id,
-  $id: `guten-${gb.id}`,
-  title: gb.title,
-  author: gb.authors?.[0]?.name || 'Unknown Author',
-  cover_url: gb.formats?.['image/jpeg'] || `https://www.gutenberg.org/cache/epub/${gb.id}/pg${gb.id}.cover.medium.jpg`,
-  subjects: gb.subjects || [],
-  isLocal: false,
-  appwriteDocumentId: null,
-  appwriteFileId: null
-})
-
-// ─── OPTIMIZED FETCHING (LOCAL-FIRST) ──────────────────────────
-
-const fetchGutendexPage = async (page: number, fValue = { ...filters }) => {
-  const gutendexUrl = new URL('https://gutendex.com/books/')
-  gutendexUrl.searchParams.append('page', page.toString())
-  if (fValue.search) gutendexUrl.searchParams.append('search', fValue.search)
-  if (fValue.topic) gutendexUrl.searchParams.append('topic', fValue.topic)
-  
-  try {
-    const res = await fetch(gutendexUrl.toString())
-    if (!res.ok) throw new Error(`Gutendex error: ${res.status}`)
-    return await res.json()
-  } catch (e) {
-    console.warn(`Silencing Gutendex failure for page ${page}:`, e)
-    return { results: [], count: 0 }
-  }
-}
+// ─── OPTIMIZED FETCHING (LOCAL-ONLY) ──────────────────────────
 
 export const fetchBooks = async (forceRefresh = false) => {
   const currentPageVal = currentPage.value
@@ -160,27 +126,10 @@ export const fetchBooks = async (forceRefresh = false) => {
     // Trigger pre-fetch for neighboring pages (Local data first)
     triggerPrefetch(currentPageVal)
 
-    // 4. Background Gutendex Fetch (Low-Priority, Non-Blocking)
-    fetchGutendexPage(currentPageVal, currentFilters).then((gutendexRes) => {
-      // Ensure we are still on the same page/filters before updating UI
-      if (currentPage.value !== currentPageVal || getCacheKey(currentPageVal) !== currentKey) return
-      
-      const remoteBooks = (gutendexRes.results || []).map(mapGutendextoHybrid)
-      const localIds = new Set(localBooks.map(b => b.id))
-      const combined = [...localBooks, ...remoteBooks.filter((b: HybridBook) => !localIds.has(b.id))]
-      
-      // Merge combined results into UI
-      books.value = combined
-      totalCount.value = appwriteRes.total + (gutendexRes.count || 0)
-      totalPages.value = Math.max(Math.ceil(appwriteRes.total / 32), Math.ceil((gutendexRes.count || 0) / 32))
-
-      // Cache final merged result
-      const entry = { books: combined, totalCount: totalCount.value, timestamp: Date.now() }
-      memoizedCache.set(currentKey, entry)
-      if (isDefaultP1) localStorage.setItem(DISK_CACHE_KEY, JSON.stringify(entry))
-      
-      triggerPrefetch(currentPageVal)
-    })
+    // 4. Cache final result
+    const entry = { books: localBooks, totalCount: totalCount.value, timestamp: Date.now() }
+    memoizedCache.set(currentKey, entry)
+    if (isDefaultP1) localStorage.setItem(DISK_CACHE_KEY, JSON.stringify(entry))
 
   } catch (error) {
     console.error('Failed to fetch local catalog:', error)
@@ -214,21 +163,7 @@ const prefetchPage = async (page: number) => {
     }
     memoizedCache.set(key, initialEntry)
 
-    // 2. Fetch Gutendex in Background (Low-Priority)
-    fetchGutendexPage(page, currentFilters).then((gutendexRes) => {
-        if (!gutendexRes.count) return // Ignore if empty/failed
-        
-        const remoteBooks = (gutendexRes.results || []).map(mapGutendextoHybrid)
-        const localIds = new Set(localBooks.map(b => b.id))
-        const combined = [...localBooks, ...remoteBooks.filter((b: HybridBook) => !localIds.has(b.id))]
-        
-        // Update cache with merged data
-        memoizedCache.set(key, { 
-            books: combined, 
-            totalCount: appwriteRes.total + (gutendexRes.count || 0), 
-            timestamp: Date.now() 
-        })
-    })
+    memoizedCache.set(key, initialEntry)
   } catch { /* ignore prefetch errors */ }
 }
 
