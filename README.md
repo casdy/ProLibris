@@ -1,54 +1,61 @@
-# 🏛️ ProLibris
+# 🏛️ ProLibris 
 
-**The Premium Digital Sanctuary for Modern Readers.**
+**The Archival Sanctuary for Distinguished Seekers.**
 
-ProLibris is a high-fidelity, magical reading platform designed to transform your digital library into an immersive sanctuary. Built with a focus on deep work and aesthetic excellence, it combines state-of-the-art reading engines with a stunning, reactive interface.
-
----
-
-## ✨ Core Features
-
-### 📖 The Magical Bookshelf
-- **Dynamic 3D Spines**: Every book in your collection is rendered with a unique, procedurally generated spine based on its content.
-- **Persistent Decks**: Organized categories for *Continue Reading*, *Enchanted Favorites*, and *Legendary Completions*.
-- **Interactive Parchment**: Detailed book metadata presented on an elegant, animated parchment overlay with reading statistics.
-
-### 🦉 High-Performance Hybrid Discovery
-- **Local-First Architecture**: Refactored for near-instant rendering. All searches and page turns prioritize your private Appwrite library.
-- **Eager Pre-fetching**: A background engine (The Magical Owl) anticipates your navigation, pre-caching neighboring pages while you browse.
-- **Gutendex Integration**: Seamless fallback to the Gutenberg public archive with background backfilling. No more "blank screen" issues or CORS/503 errors.
-
-### ⚡ Advanced Reader Engines
-- **Standard Mode (The Classic)**: Distraction-free, premium EPUB rendering powered by `epubjs`.
-- **Focus Engine (Speed Read)**:
-  - **Visual Pacing**: Eliminate subvocalization with a steady mathematical pace.
-  - **Zero-Latency Scraping**: Real-time text extraction for a continuous, "gapless" reading flow.
-  - **On-the-Fly Zoom**: Adjust typography and WPM without leaving the focus state.
-- **Audio Paced Mode**: Integrated support for neural TTS (via Puter.js) for high-fidelity audio synthesis.
-
-### 🎨 Design & UX (Wizarding Aesthetic)
-- **Scarlet & Gold Theme**: A premium visual language featuring blurred backdrops, Wizarding Gold highlights, and smooth Transitions.
-- **Mobile-First PWA**: Fully optimized for the Home Screen with manifest support and custom Apple Touch Icons.
-- **Universal Mode**: Seamless transition between Magical Dark and Wizarding Light themes.
+ProLibris is a high-fidelity, magical reading portal designed to transform your digital collection into an immersive, private sanctuary. Built for the deep work of literary archival and scholarly focus, it combines state-of-the-art reading engines with a stunning, resonant interface.
 
 ---
 
-## 🚀 Getting Started
+## ✨ Archival Intelligence
+
+### 📖 The Enchanted Bookshelf
+- **Dynamic 3D Spines**: Every tome is rendered with a unique, procedurally generated spine that reflects its archival identity.
+- **Persistent Decks**: Intelligent organization into *Continue Reading*, *Vaulted Favorites*, and *Mastered Chronicles*.
+- **Parchment Analytics**: Detailed metadata presented on animated parchment, featuring real-time reading intensity and archival progress.
+
+### 🦉 The Magical Owl (Discovery Engine)
+- **High-Performance Hybridization**: Near-instant rendering of thousands of books. All searches and navigations prioritize your private Appwrite vault.
+- **Eager Pre-fetching**: The Owl anticipates your archival journey, pre-caching neighboring pages in the background for a zero-latency experience.
+- **Universal Archive**: Seamless fallback to the Gutenberg public catalog with automated background backfilling for a non-breaking library view.
+
+### ⚡ Professional Reading Engines
+- **Standard Mode**: Distraction-free, premium EPUB rendering with precision typography.
+- **Archival Focus (Speed Read)**: 
+  - **Fluid Pacing**: Eliminate subvocalization with a steady, mathematically driven visual rhythm.
+  - **Zero-Latency Text Extraction**: Real-time content scraping for a continuous, "gapless" reading flow.
+  - **Live Calibration**: Adjust WPM and typography instantly from the focus dashboard.
+- **Binaural Paced Mode**: Integrated neural TTS (via Puter.js) for high-fidelity audio synthesis and synchronization.
+
+### 📈 Intelligent Mastery Tracking
+- **Unit-Based Mastery**: No more binary tracking. Your "Collection Growth" is driven by a page-fidelity algorithm (250 pages = 1 Archival Unit).
+- **Seeker Status**: Real-time tracking of reading streaks, WPM peaks, and accuracy across your entire library history.
+
+---
+
+## 🎨 Professional Design System
+
+- **Scarlet & Gold Aesthetic**: A premium visual grammar featuring glassmorphism, Wizarding Gold accents, and reactive transitions.
+- **Archival Workstation Logic**: Global system-wide scaling (88%) for a denser, more information-rich research environment.
+- **Universal Portability**: Progressive Web App (PWA) manifest support with a high-definition "Magical Owl" favicon and home-screen identity.
+
+---
+
+## 🚀 Deployment & Archival Setup
 
 ### 1. Prerequisites
 - **Node.js (v18+)**
-- **Appwrite Project**: (Cloud or Self-hosted)
-- **API Access**: Access to `https://gutendex.com` (public fallback).
+- **Appwrite Instance**: (Cloud or Self-hosted Archival Backend)
+- **API Access**: Access to `https://gutendex.com` (Universal Catalog Backup).
 
-### 2. Installation
+### 2. Initialization
 ```bash
 git clone https://github.com/Antigravity-AI/prolibris.git
 cd ProLibris
 npm install
 ```
 
-### 3. Configuration
-Copy `.env.example` to `.env.local` and fill in your Appwrite credentials:
+### 3. Archival Configuration
+Create `.env.local` with your archival credentials:
 ```env
 VITE_APPWRITE_ENDPOINT=https://cloud.appwrite.io/v1
 VITE_APPWRITE_PROJECT_ID=your_id
@@ -57,35 +64,11 @@ VITE_APPWRITE_COLLECTION_ID=your_coll
 VITE_APPWRITE_BUCKET_ID=your_bucket
 ```
 
-### 4. Operations & Diagnostics
-ProLibris includes several high-performance utility scripts:
-- **Seed Database**: Initialize your magical collection.
-  ```bash
-  npm run seed-db
-  ```
-- **Book Count**: Run diagnostic checks on your repository.
-  ```bash
-  npx ts-node scripts/count-books.ts
-  ```
-
-### 5. Launch
+### 4. Manifestation
 ```bash
 npm run dev
 ```
 
 ---
 
-## 🛠️ Tech Stack
-- **Frontend**: [Vue.js 3](https://vuejs.org/) + [Vite](https://vitejs.dev/)
-- **State Management**: [Pinia](https://pinia.vuejs.org/) (High-Performance Reading State)
-- **Backend-as-a-Service**: [Appwrite](https://appwrite.io/) (Archival Storage & Session Sync)
-- **Reading Engine**: [ePub.js](https://github.com/futurepress/epub.js/)
-- **Icons**: [Lucide Vue Next](https://lucide.dev/)
-- **Branding**: Customized magical owl branding with PWA manifest integration.
-
----
-
-## 📜 License
-This project is licensed under the MIT License.
-
-*Crafted with precision by the ProLibris Engineering Team.*
+*Crafted with absolute precision for the ProLibris Scholarly Archive.*

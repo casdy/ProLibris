@@ -291,13 +291,13 @@ function scrollShelf(key: string, dir: 'left' | 'right') {
             <img :src="selected.book.cover_url || 'https://via.placeholder.com/120x180'" :alt="selected.book.title" class="modal-cover" />
             <div class="cover-glow" :style="{ background: selected.style.palette.bg }" />
           </div>
-          <div class="modal-meta">
+          <div class="modal-meta min-w-0">
             <div class="modal-status-badge" :style="{ color: statusColor[selected.session?.status || 'unread'], borderColor: statusColor[selected.session?.status || 'unread'] + '40' }">
               <CheckCircle2 class="w-3.5 h-3.5" />
               {{ (selected.session?.status || 'unread').toUpperCase() }}
             </div>
-            <h2 class="modal-title">{{ selected.book.title }}</h2>
-            <p class="modal-author">by {{ selected.book.author }}</p>
+            <h2 class="modal-title line-clamp-2">{{ selected.book.title }}</h2>
+            <p class="modal-author truncate">by {{ selected.book.author }}</p>
             <div v-if="selected.book.subjects?.length" class="modal-subjects">
               <span v-for="subj in selected.book.subjects.slice(0, 2)" :key="subj" class="subject-tag">{{ subj }}</span>
             </div>

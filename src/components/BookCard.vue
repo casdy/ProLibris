@@ -91,7 +91,7 @@ const handleReadClick = () => {
     </div>
 
     <!-- Book Info -->
-    <div class="p-3 flex-1 flex flex-col">
+    <div class="p-3 flex-1 flex flex-col min-w-0">
       <div class="mb-1 line-clamp-1">
         <span v-for="subject in book.subjects?.slice(0, 1)" :key="subject || 'General'" class="text-[8px] font-bold uppercase tracking-wider text-[#AE0001] bg-[#AE0001]/5 dark:bg-[#AE0001]/20 px-1.5 py-0.5 rounded-md">
           {{ subject }}
@@ -102,7 +102,7 @@ const handleReadClick = () => {
         {{ book.title }}
       </h3>
       
-      <p class="theme-text-soft text-[10px] font-medium mb-2">
+      <p class="theme-text-soft text-[10px] font-medium mb-2 truncate">
         {{ book.author }}
       </p>
 

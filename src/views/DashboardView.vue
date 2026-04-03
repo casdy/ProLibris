@@ -150,7 +150,7 @@ function formatDate(dateStr?: string) {
         <div class="lg:col-span-2 relative bg-gradient-to-br from-[#1a0f05] via-[#2a180d] to-[#3d2212] rounded-[2.5rem] p-10 overflow-hidden shadow-2xl flex flex-col justify-between min-h-[320px]">
           <div class="absolute top-0 right-0 w-[40%] h-full bg-gradient-to-l from-amber-500/10 to-transparent blur-3xl opacity-20 pointer-events-none" />
           <div class="z-10">
-            <h2 class="text-4xl lg:text-5xl font-bold text-white mb-4 tracking-tight leading-tight">
+            <h2 class="text-2xl sm:text-3xl lg:text-5xl font-bold text-white mb-4 tracking-tight leading-tight truncate">
               Good evening, <br/>
               <span class="text-[#EEBA30]">{{ auth.user?.name?.split(' ')[0] }}</span>.
             </h2>

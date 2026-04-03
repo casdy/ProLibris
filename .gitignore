@@ -46,7 +46,13 @@ Desktop.ini
 # Development Scripts (Ignored because they contain secret API keys)
 scripts/seed.ts
 scripts/migrate-schema.ts
+scripts/extract_owl.py
 scripts/*.local.ts
+
+# Temporal Extraction Artifacts
+icon_audit.md
+__pycache__/
+*.pyc
 
 # AI Tooling & Assistants
 .gemini/

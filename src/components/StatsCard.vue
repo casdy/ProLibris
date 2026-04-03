@@ -13,10 +13,10 @@ defineProps<{
   <div class="theme-card backdrop-blur-xl border theme-border p-6 rounded-3xl shadow-xl shadow-black/10 hover:transform hover:-translate-y-1 transition-all duration-300">
     <div class="flex items-start justify-between">
       <div class="space-y-3">
-        <p class="theme-text-soft font-bold text-[10px] uppercase tracking-widest opacity-60">
+        <p class="theme-text-soft font-bold text-[10px] uppercase tracking-widest opacity-60 truncate">
           {{ title }}
         </p>
-        <h3 class="text-3xl font-bold theme-text">
+        <h3 class="text-3xl font-bold theme-text truncate">
           {{ value }}
         </h3>
       </div>

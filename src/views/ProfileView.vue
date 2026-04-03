@@ -32,7 +32,26 @@ const stats = computed(() => {
   })
   const totalDays = new Set(allDates).size
 
-  return { totalPages, completed, reading, maxWpm, avgAcc, totalDays }
+  return { totalPages, completed, reading, maxWpm, avgAcc, totalDays, totalSessions: sessions.length }
+})
+
+const masteryProgress = computed(() => {
+  const sessions = library.sessions || []
+  if (sessions.length === 0) return 0
+  
+  const totalWeight = sessions.reduce((sum, s) => {
+    if (s.status === 'completed') return sum + 1
+    if (s.status === 'reading') {
+      // 250 pages = 1 standard 'book unit' of mastery
+      // We cap it at 0.95 to ensure 'Reading' never shows 100% until finished
+      const progress = Math.min(0.95, (s.pages_turned || 0) / 250)
+      return sum + progress
+    }
+    return sum
+  }, 0)
+  
+  const rawProgress = (totalWeight / sessions.length) * 100
+  return Math.min(100, Math.round(rawProgress))
 })
 
 const favoriteGenre = computed(() => {
@@ -237,10 +256,10 @@ onMounted(async () => {
             <div class="flex-1 w-full space-y-4">
                <div class="flex justify-between items-end">
                   <span class="text-xs font-black uppercase tracking-widest text-[#AE0001]">Mastery Progress</span>
-                  <span class="text-sm font-black text-[#EEBA30]">{{ Math.round((stats.completed / library.allBooks.length) * 100) || 0 }}%</span>
+                  <span class="text-sm font-black text-[#EEBA30]">{{ masteryProgress }}%</span>
                </div>
                <div class="h-4 bg-black/40 rounded-full overflow-hidden border theme-border p-1">
-                  <div class="h-full bg-gradient-to-r from-[#AE0001] via-[#EEBA30] to-[#AE0001] rounded-full transition-all duration-1000 shadow-lg shadow-[#AE0001]/30" :style="{ width: `${Math.max(5, (stats.completed / library.allBooks.length) * 100)}%` }"></div>
+                  <div class="h-full bg-gradient-to-r from-[#AE0001] via-[#EEBA30] to-[#AE0001] rounded-full transition-all duration-1000 shadow-lg shadow-[#AE0001]/30" :style="{ width: `${Math.max(5, masteryProgress)}%` }"></div>
                </div>
             </div>
          </div>
