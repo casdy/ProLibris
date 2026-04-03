@@ -104,11 +104,34 @@ watch(() => [props.fontSize, props.isDark], applyStyles)
 const prevPage = () => renditionInstance?.prev()
 const nextPage = () => renditionInstance?.next()
 
-onMounted(initializeStandard)
+// Debounced resize for mobile orientation changes and virtual keyboard
+let resizeTimeout: ReturnType<typeof setTimeout> | null = null
+const handleResize = () => {
+  if (resizeTimeout) clearTimeout(resizeTimeout)
+  resizeTimeout = setTimeout(() => {
+    if (renditionInstance && viewer.value) {
+      try {
+        const rect = viewer.value.getBoundingClientRect()
+        renditionInstance.resize(rect.width, rect.height)
+      } catch { /* ignore */ }
+    }
+  }, 250)
+}
+
+onMounted(() => {
+  window.addEventListener('resize', handleResize)
+  initializeStandard()
+})
 
 onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+  if (resizeTimeout) clearTimeout(resizeTimeout)
   if (renditionInstance) {
     try { renditionInstance.destroy() } catch { /* ignore */ }
+  }
+  if (bookInstance) {
+    try { bookInstance.destroy() } catch { /* ignore */ }
+    bookInstance = null
   }
 })
 

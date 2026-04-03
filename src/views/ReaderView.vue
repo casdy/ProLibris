@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useLibraryStore } from '@/stores/library'
 import { useReaderStore } from '@/stores/reader'
 import { useUIStore } from '@/stores/ui'
 import { storage, BUCKET_ID } from '@/lib/appwrite'
-import ePub from 'epubjs'
 import ReaderLayout from '@/components/reader/ReaderLayout.vue'
 import { X, Settings, Moon, Sun, Type, Loader2 } from 'lucide-vue-next'
 
@@ -56,7 +56,7 @@ const saveProgress = (cfi: string) => {
   }
   
   saveTimeout = setTimeout(() => {
-    library.updateProgress(bookId, cfi, 1, analyticsData as Record<string, unknown>)
+    library.updateProgress(bookId, cfi, 1, analyticsData as unknown as Record<string, unknown>)
   }, 3000)
 }
 
@@ -125,24 +125,14 @@ const initializeReader = async () => {
       reader.targetWpm = session.target_read_wpm
     }
 
-    // 5. Common Initialization
+    // 5. Set book ID on reader store — the actual epub.js book instance
+    //    will be created by StandardEngine and provided via @spine-loaded.
+    //    This avoids parsing the EPUB twice, which causes blank screens on mobile.
     const finalBookId = bookMetadata.value?.$id || bookId
     reader.bookId = finalBookId
-    const book = ePub(epubData.value)
-    await book.ready
-    await reader.initBook(book, finalBookId)
     
     // Manifest the "Archival Touch": Update last_read_at as soon as the portal opens
     await library.updateProgress(finalBookId, initialCfi.value || "", 0)
-
-    await reader.extractCurrentChapter()
-
-    if (reader.activeMode === 'typing') {
-      reader.resetTypingState()
-      reader.startWpmSampling()
-    } else if (reader.activeMode === 'paced') {
-      reader.resetPacedState()
-    }
 
     loading.value = false
   } catch (e: unknown) {

@@ -28,8 +28,20 @@ const router = useRouter()
 const reader = useReaderStore()
 const standardEngine = ref<InstanceType<typeof StandardEngine> | null>(null)
 
-const onSpineLoaded = (book: Book) => {
-  reader.initBook(book, '')
+const onSpineLoaded = async (book: Book) => {
+  // reader.bookId is already set by ReaderView before this component mounts.
+  // Use it here so session saving and chapter extraction work correctly.
+  await reader.initBook(book, reader.bookId)
+
+  // Now that the book is ready, extract the first chapter for non-standard modes
+  await reader.extractCurrentChapter()
+
+  if (reader.activeMode === 'typing') {
+    reader.resetTypingState()
+    reader.startWpmSampling()
+  } else if (reader.activeMode === 'paced') {
+    reader.resetPacedState()
+  }
 }
 
 const onRelocated = (cfi: string) => {
