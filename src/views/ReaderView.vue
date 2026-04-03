@@ -109,6 +109,10 @@ const initializeReader = async () => {
     const book = ePub(epubData.value)
     await book.ready
     await reader.initBook(book, finalBookId)
+    
+    // Manifest the "Archival Touch": Update last_read_at as soon as the portal opens
+    await library.updateProgress(finalBookId, initialCfi.value || "", 0)
+
     await reader.extractCurrentChapter()
 
     if (reader.activeMode === 'typing') {

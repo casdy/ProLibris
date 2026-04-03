@@ -28,9 +28,7 @@ const stats = computed(() => {
   const avgAcc = countAcc > 0 ? Math.round(totalAcc / countAcc) : 0
 
   const allDates = sessions.flatMap((s: ReadingSession) => {
-    const dates = [...(s.read_dates || [])]
-    if (s.last_read_at) dates.push(s.last_read_at.split('T')[0])
-    return dates
+    return s.last_read_at ? [s.last_read_at.split('T')[0]] : []
   })
   const totalDays = new Set(allDates).size
 

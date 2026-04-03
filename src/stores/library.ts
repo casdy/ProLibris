@@ -90,6 +90,17 @@ export const useLibraryStore = defineStore('library', {
         .sort((a, b) => new Date(b.last_read_at || 0).getTime() - new Date(a.last_read_at || 0).getTime())[0]
       return state.allBooks.find(b => b.$id === lastSession?.book_id)
     },
+    recentReadingList(state) {
+      const sorted = [...state.sessions]
+        .filter(s => s.last_read_at)
+        .sort((a, b) => new Date(b.last_read_at || 0).getTime() - new Date(a.last_read_at || 0).getTime())
+        .slice(0, 5)
+      
+      return sorted.map(s => {
+        const book = state.allBooks.find(b => b.$id === s.book_id)
+        return { book, session: s }
+      }).filter(item => item.book)
+    },
     recommendations(): Book[] {
       return this.enchantedBooks
     },
@@ -211,18 +222,11 @@ export const useLibraryStore = defineStore('library', {
       if (!auth.user) return
 
       const session = this.sessions.find(s => s.book_id === bookId)
-    const today = new Date().toISOString().split('T')[0]
-    const updatedDates = [...(session?.read_dates || [])]
-    if (!updatedDates.includes(today)) {
-      updatedDates.push(today)
-    }
-
     const data: Record<string, unknown> = {
       progress_cfi: cfi,
       last_read_at: new Date().toISOString(),
       status: 'reading',
       pages_turned: (session?.pages_turned || 0) + pagesInc,
-      read_dates: updatedDates,
     }
 
       // Merge analytics data if provided

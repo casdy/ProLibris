@@ -60,6 +60,7 @@
     @apply transition-colors duration-75;
     overscroll-behavior-y: contain;
     height: 100%;
+    zoom: 0.88;
   }
   
   body {

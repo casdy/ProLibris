@@ -5,7 +5,8 @@ import { useLibraryStore } from '@/stores/library'
 import { useUIStore } from '@/stores/ui'
 import { useBookCatalog } from '@/composables/useBookCatalog'
 import { BookOpen, Flame, Sparkles, LogOut, ChevronRight,
-  Moon, Sun, Search, X, Library, CheckCircle2, Filter
+  Moon, Sun, Search, X, Library, CheckCircle2, Filter,
+  Clock, Zap
 } from 'lucide-vue-next'
 import BookCard from '@/components/BookCard.vue'
 import StatsCard from '@/components/StatsCard.vue'
@@ -47,10 +48,8 @@ const stats = computed(() => {
   const sessions = library.sessions || []
   const totalPages = sessions.reduce((acc: number, s: { pages_turned?: number }) => acc + (s.pages_turned || 0), 0)
   const completed  = sessions.filter((s: { status: string }) => s.status === 'completed').length
-  const allDates = sessions.flatMap((s: { read_dates?: string[], last_read_at?: string }) => {
-    const dates = [...(s.read_dates || [])]
-    if (s.last_read_at) dates.push(s.last_read_at.split('T')[0])
-    return dates
+  const allDates = sessions.flatMap((s: { last_read_at?: string }) => {
+    return s.last_read_at ? [s.last_read_at.split('T')[0]] : []
   })
   const activeDays = new Set(allDates).size
   return [
@@ -71,6 +70,22 @@ const sectionTitle = computed(() => {
 const hasBookshelfContent = computed(() =>
   library.sessions.some(s => s.progress_cfi || s.is_liked)
 )
+
+const showRecentTomes = ref(false)
+
+function formatDate(dateStr?: string) {
+  if (!dateStr) return 'Recently'
+  const d = new Date(dateStr)
+  const diff = Date.now() - d.getTime()
+  const mins  = Math.floor(diff / 60000)
+  const hours = Math.floor(diff / 3600000)
+  const days  = Math.floor(diff / 86400000)
+  if (mins < 1)   return 'just now'
+  if (mins < 60)  return `${mins}m ago`
+  if (hours < 24) return `${hours}h ago`
+  if (days < 7)   return `${days}d ago`
+  return d.toLocaleDateString()
+}
 </script>
 
 <template>
@@ -79,9 +94,9 @@ const hasBookshelfContent = computed(() =>
     <!-- ═══ Navbar ═══ -->
     <nav class="sticky top-0 z-50 theme-nav backdrop-blur-3xl border-b theme-border px-6 py-4 lg:px-12">
       <div class="max-w-7xl mx-auto flex items-center justify-between">
-        <div class="flex items-center gap-3">
+        <div class="flex flex-col sm:flex-row items-center gap-1 sm:gap-4 flex-shrink-0">
           <AppLogo size="md" class="hover:scale-110 transition-transform cursor-pointer" />
-          <h1 class="text-xl font-black theme-text tracking-widest uppercase font-cinzel text-[#EEBA30] hidden sm:block">Prolibris</h1>
+          <h1 class="text-[10px] sm:text-xl font-black theme-text tracking-[0.2em] sm:tracking-widest uppercase font-cinzel text-[#EEBA30] leading-none">Prolibris</h1>
         </div>
 
         <div class="flex items-center gap-4">
@@ -144,13 +159,19 @@ const hasBookshelfContent = computed(() =>
             </p>
           </div>
 
-          <div v-if="library.continueReadingBook" class="z-10 mt-8 flex flex-col sm:flex-row items-center gap-6 p-4 bg-white/5 backdrop-blur-md rounded-3xl border border-white/5 shadow-2xl">
-            <img :src="library.continueReadingBook.cover_url" class="h-28 w-20 object-cover rounded-xl shadow-lg shadow-black/20" />
+          <div v-if="library.continueReadingBook" 
+               @click="showRecentTomes = true"
+               class="z-10 mt-8 flex flex-col sm:flex-row items-center gap-6 p-4 bg-white/5 backdrop-blur-md rounded-3xl border border-white/5 shadow-2xl cursor-pointer hover:bg-white/10 transition-all group">
+            <img :src="library.continueReadingBook.cover_url" class="h-28 w-20 object-cover rounded-xl shadow-lg shadow-black/20 group-hover:scale-105 transition-transform" />
             <div class="flex-1 min-w-0">
               <p class="text-[10px] uppercase font-black tracking-widest text-[#EEBA30] mb-1">Continue Reading</p>
               <h4 class="text-white font-bold text-lg mb-1 leading-tight truncate">{{ library.continueReadingBook.title }}</h4>
               <p class="text-white/40 text-sm font-medium mb-3 truncate">{{ library.continueReadingBook.author }}</p>
-              <router-link :to="`/read/${library.continueReadingBook.$id}`" class="inline-flex items-center gap-2 bg-[#AE0001] text-white px-5 py-2 rounded-xl text-sm font-bold shadow-lg shadow-[#AE0001]/20 hover:scale-105 transition-transform active:scale-95">
+              <router-link 
+                @click.stop
+                :to="`/read/${library.continueReadingBook.$id}`" 
+                class="inline-flex items-center gap-2 bg-[#AE0001] text-white px-5 py-2 rounded-xl text-sm font-bold shadow-lg shadow-[#AE0001]/20 hover:scale-105 transition-transform active:scale-95"
+              >
                 Jump Back In <ChevronRight class="w-4 h-4" />
               </router-link>
             </div>
@@ -381,6 +402,73 @@ const hasBookshelfContent = computed(() =>
        <Filter class="w-6 h-6" />
        <div v-if="catalog.filters.topic" class="absolute -top-1 -right-1 w-4 h-4 bg-white dark:bg-slate-900 text-[#EEBA30] text-[10px] font-black rounded-full border-2 border-[#AE0001] flex items-center justify-center">1</div>
     </button>
+
+    <!-- ═══ Recent Tomes Portal Overlay ═══ -->
+    <Teleport to="body">
+       <Transition name="modal-fade">
+          <div v-if="showRecentTomes" class="fixed inset-0 z-[200] flex items-center justify-center p-6">
+            <div class="absolute inset-0 bg-black/80 backdrop-blur-xl" @click="showRecentTomes = false" />
+            
+            <div class="relative w-full max-w-xl bg-gradient-to-br from-[#2a180d] via-[#1a0f05] to-[#2a180d] rounded-[3rem] p-8 border border-white/10 shadow-2xl overflow-hidden">
+               <!-- Magical Glows -->
+               <div class="absolute -top-24 -right-24 w-64 h-64 bg-amber-500/10 blur-[100px] pointer-events-none" />
+               <div class="absolute -bottom-24 -left-24 w-64 h-64 bg-[#AE0001]/10 blur-[100px] pointer-events-none" />
+
+               <div class="flex items-center justify-between mb-8">
+                  <div>
+                    <h3 class="text-2xl font-black theme-text font-cinzel text-[#EEBA30] uppercase tracking-wider">Recently Accessed</h3>
+                    <p class="text-white/40 text-xs font-bold uppercase tracking-widest mt-1">Jump back into your paths</p>
+                  </div>
+                  <button @click="showRecentTomes = false" class="p-3 hover:bg-white/5 rounded-full transition-colors text-white/60 hover:text-white">
+                    <X class="w-6 h-6" />
+                  </button>
+               </div>
+
+               <div class="space-y-4 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+                  <div 
+                    v-for="item in library.recentReadingList" 
+                    :key="item.book?.$id || 'unknown'"
+                    @click="item.book && router.push(`/read/${item.book.$id}`)"
+                    class="group flex items-center gap-5 p-4 rounded-3xl bg-white/5 border border-white/5 transition-all hover:bg-white/10 hover:border-white/10 cursor-pointer active:scale-[0.98]"
+                  >
+                     <div class="relative flex-shrink-0">
+                        <img :src="item.book?.cover_url" class="w-16 h-24 object-cover rounded-xl shadow-xl transition-all group-hover:scale-105" />
+                        <div class="absolute inset-0 rounded-xl ring-1 ring-inset ring-white/10" />
+                     </div>
+                     
+                     <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2 mb-1">
+                           <Clock class="w-3 h-3 text-[#EEBA30]" />
+                           <span class="text-[10px] font-black uppercase tracking-widest text-[#EEBA30]">{{ formatDate(item.session.last_read_at) }}</span>
+                        </div>
+                        <h4 class="text-white font-bold text-lg mb-0.5 truncate leading-tight">{{ item.book?.title }}</h4>
+                        <p class="text-white/40 text-sm font-medium truncate mb-2">{{ item.book?.author }}</p>
+                        
+                        <div class="flex items-center gap-4">
+                           <div class="flex items-center gap-1.5 px-3 py-1 bg-[#AE0001]/20 rounded-lg text-[10px] font-black text-[#AE0001] uppercase tracking-widest border border-[#AE0001]/30">
+                              <Zap class="w-3 h-3" />
+                              {{ item.session.status === 'completed' ? 'Mastered' : 'Progressing' }}
+                           </div>
+                        </div>
+                     </div>
+                     
+                     <ChevronRight class="w-6 h-6 text-white/20 group-hover:text-[#EEBA30] group-hover:translate-x-1 transition-all" />
+                  </div>
+               </div>
+
+               <p v-if="library.recentReadingList.length === 0" class="text-center py-12 text-white/20 font-bold tracking-widest uppercase text-sm">
+                  No recently accessed tomes found
+               </p>
+
+               <div class="mt-8 pt-6 border-t border-white/5 flex justify-center">
+                  <button @click="showRecentTomes = false" class="text-xs font-black uppercase tracking-[0.3em] text-white/40 hover:text-[#EEBA30] transition-colors">
+                     Close Portal
+                  </button>
+               </div>
+            </div>
+          </div>
+       </Transition>
+    </Teleport>
   </div>
 </template>
 
@@ -400,4 +488,13 @@ const hasBookshelfContent = computed(() =>
   from { transform: translateY(100%); }
   to   { transform: translateY(0); }
 }
+
+.modal-fade-enter-active { animation: modalIn 0.45s cubic-bezier(0.16, 1, 0.3, 1); }
+.modal-fade-leave-active { animation: modalIn 0.25s cubic-bezier(0.4, 0, 1, 1) reverse; }
+@keyframes modalIn { from { opacity: 0; transform: scale(0.88) translateY(24px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+
+.custom-scrollbar::-webkit-scrollbar { width: 4px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
 </style>
