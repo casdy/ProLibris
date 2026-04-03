@@ -27,15 +27,35 @@ const initialCfi = ref<string | undefined>(undefined)
 
 // Debounced save progress
 let saveTimeout: ReturnType<typeof setTimeout> | null = null
+interface ReaderAnalytics {
+  status: 'reading' | 'completed'
+  avg_type_wpm?: number
+  avg_accuracy?: number
+  mode_preference?: 'typing' | 'paced' | 'standard'
+  target_read_wpm?: number
+}
+
 const saveProgress = (cfi: string) => {
   if (saveTimeout) clearTimeout(saveTimeout)
   
-  // Intelligent Mastery Detection
+  // Archival Analytics Synchronization
   const isLastChapter = reader.currentSpineIndex === (reader.spineItems.length - 1)
   const status = isLastChapter ? 'completed' : 'reading'
   
+  const analyticsData: ReaderAnalytics = { status }
+  if (reader.activeMode === 'typing') {
+    analyticsData.avg_type_wpm = Math.round(reader.sessionStats.currentWpm)
+    analyticsData.avg_accuracy = Math.round(reader.sessionStats.accuracy)
+    analyticsData.mode_preference = 'typing'
+  } else if (reader.activeMode === 'paced') {
+    analyticsData.mode_preference = 'paced'
+    analyticsData.target_read_wpm = reader.targetWpm
+  } else {
+    analyticsData.mode_preference = 'standard'
+  }
+  
   saveTimeout = setTimeout(() => {
-    library.updateProgress(bookId, cfi, 1, { status })
+    library.updateProgress(bookId, cfi, 1, analyticsData as Record<string, unknown>)
   }, 3000)
 }
 

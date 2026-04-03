@@ -8,29 +8,42 @@ const activeCharRef = ref<HTMLElement | null>(null)
 
 const mobileInput = ref<HTMLInputElement | null>(null)
 
-// Focus management
+// Focus management - Latch the keyboard to the archival workstation
 const syncFocus = () => {
   mobileInput.value?.focus()
 }
 
-// Keystroke handler
+// Functional Key Handler (Backspace, Enter)
 const onKeydown = (e: KeyboardEvent) => {
-  // Desktop still uses this for common flow
-  reader.handleKeystroke(e)
-  // Clear input to avoid double-trigger or buffer buildup
-  if (mobileInput.value) mobileInput.value.value = ""
-  nextTick(scrollToActive)
+  const functionalKeys = ['Backspace', 'Enter']
+  if (functionalKeys.includes(e.key)) {
+    reader.handleTypingInput(e.key)
+    if (mobileInput.value) mobileInput.value.value = ""
+    nextTick(scrollToActive)
+    e.preventDefault()
+  }
 }
 
-// Mobile-specific input handler
+// Sovereign Character Handler (Mobile Virtual Keyboard Support)
+const onBeforeInput = (e: InputEvent) => {
+  const char = e.data
+  if (char && char.length === 1) {
+    reader.handleTypingInput(char)
+    if (mobileInput.value) mobileInput.value.value = ""
+    nextTick(scrollToActive)
+    e.preventDefault()
+  }
+}
+
+// Global text input fallback (Legacy)
 const onInput = (e: Event) => {
   const input = e.target as HTMLInputElement
-  const char = input.value.slice(-1)
-  if (char) {
+  if (input.value) {
+    const char = input.value.slice(-1)
     reader.handleTypingInput(char)
-    input.value = "" // Always clear
+    input.value = ""
+    nextTick(scrollToActive)
   }
-  nextTick(scrollToActive)
 }
 
 // Auto-scroll to keep active character centered
@@ -47,13 +60,12 @@ watch(() => reader.currentCharIndex, () => {
 })
 
 onMounted(() => {
-  window.addEventListener('keydown', onKeydown)
   syncFocus()
   nextTick(scrollToActive)
 })
 
 onUnmounted(() => {
-  window.removeEventListener('keydown', onKeydown)
+  // Sovereign input cleaned up automatically with element destroy
 })
 
 // Group chars into visual paragraph lines
@@ -109,6 +121,7 @@ const paragraphGroups = computed(() => {
         class="absolute opacity-0 pointer-events-none"
         @input="onInput"
         @keydown="onKeydown"
+        @beforeinput="onBeforeInput"
         autocorrect="off"
         autocapitalize="off"
         spellcheck="false"

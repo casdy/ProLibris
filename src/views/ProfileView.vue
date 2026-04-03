@@ -21,18 +21,21 @@ const stats = computed(() => {
   const completed = sessions.filter(s => s.status === 'completed').length
   const reading = sessions.filter(s => s.status === 'reading').length
   
-  // High Stats
-  const maxWpm = sessions.reduce((max, s) => Math.max(max, s.avg_type_wpm || 0), 0)
-  const totalAcc = sessions.filter(s => s.avg_accuracy).reduce((acc, s) => acc + (s.avg_accuracy || 0), 0)
-  const countAcc = sessions.filter(s => s.avg_accuracy).length
-  const avgAcc = countAcc > 0 ? Math.round(totalAcc / countAcc) : 0
+  // High-Fidelity Typing Analytics
+  const typingSessions = sessions.filter(s => (s.avg_type_wpm || 0) > 0)
+  const maxWpm = typingSessions.reduce((max, s) => Math.max(max, s.avg_type_wpm || 0), 0)
+  const totalWpm = typingSessions.reduce((acc, s) => acc + (s.avg_type_wpm || 0), 0)
+  const avgWpm = typingSessions.length > 0 ? Math.round(totalWpm / typingSessions.length) : 0
+  
+  const totalAcc = typingSessions.reduce((acc, s) => acc + (s.avg_accuracy || 0), 0)
+  const avgAcc = typingSessions.length > 0 ? Math.round(totalAcc / typingSessions.length) : 0
 
   const allDates = sessions.flatMap((s: ReadingSession) => {
     return s.last_read_at ? [s.last_read_at.split('T')[0]] : []
   })
   const totalDays = new Set(allDates).size
 
-  return { totalPages, completed, reading, maxWpm, avgAcc, totalDays, totalSessions: sessions.length }
+  return { totalPages, completed, reading, maxWpm, avgWpm, avgAcc, totalDays, totalSessions: sessions.length }
 })
 
 const masteryProgress = computed(() => {
@@ -159,11 +162,12 @@ onMounted(async () => {
           <div class="absolute -bottom-8 -right-8 w-24 h-24 bg-[#EEBA30]/5 rounded-full blur-2xl group-hover:bg-[#EEBA30]/10 transition-all"></div>
         </div>
 
-        <!-- Mastery -->
+        <!-- Mastery (Typing Speed) -->
         <div class="theme-card p-8 rounded-[2.5rem] border theme-border relative overflow-hidden group hover:border-[#AE0001]/50 transition-all" :class="{ 'opacity-20 blur-sm': isSyncing }">
           <Zap class="w-10 h-10 text-[#AE0001] mb-6 transform group-hover:scale-110 transition-transform" />
-          <h4 class="text-5xl font-black theme-text font-cinzel mb-2">{{ stats.maxWpm }}</h4>
-          <p class="text-sm font-bold theme-text-soft uppercase tracking-widest opacity-60">Highest WPM Mastery</p>
+          <h4 class="text-5xl font-black theme-text font-cinzel mb-2">{{ stats.avgWpm }}</h4>
+          <p class="text-sm font-bold theme-text-soft uppercase tracking-widest opacity-60">Avg Typing WPM</p>
+          <div class="mt-2 text-[10px] font-black uppercase tracking-widest text-[#AE0001] opacity-40">Peak: {{ stats.maxWpm }}</div>
           <div class="absolute -bottom-8 -right-8 w-24 h-24 bg-[#AE0001]/5 rounded-full blur-2xl group-hover:bg-[#AE0001]/10 transition-all"></div>
         </div>
 
@@ -171,7 +175,7 @@ onMounted(async () => {
         <div class="theme-card p-8 rounded-[2.5rem] border theme-border relative overflow-hidden group hover:border-emerald-500/50 transition-all" :class="{ 'opacity-20 blur-sm': isSyncing }">
           <Target class="w-10 h-10 text-emerald-500 mb-6 transform group-hover:scale-110 transition-transform" />
           <h4 class="text-5xl font-black theme-text font-cinzel mb-2">{{ stats.avgAcc }}%</h4>
-          <p class="text-sm font-bold theme-text-soft uppercase tracking-widest opacity-60">Average Core Accuracy</p>
+          <p class="text-sm font-bold theme-text-soft uppercase tracking-widest opacity-60">Global Accuracy</p>
           <div class="absolute -bottom-8 -right-8 w-24 h-24 bg-emerald-500/5 rounded-full blur-2xl"></div>
         </div>
 
