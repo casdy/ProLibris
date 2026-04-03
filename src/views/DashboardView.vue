@@ -165,8 +165,8 @@ function formatDate(dateStr?: string) {
             <img :src="library.continueReadingBook.cover_url" class="h-28 w-20 object-cover rounded-xl shadow-lg shadow-black/20 group-hover:scale-105 transition-transform" />
             <div class="flex-1 min-w-0">
               <p class="text-[10px] uppercase font-black tracking-widest text-[#EEBA30] mb-1">Continue Reading</p>
-              <h4 class="text-white font-bold text-lg mb-1 leading-tight truncate">{{ library.continueReadingBook.title }}</h4>
-              <p class="text-white/40 text-sm font-medium mb-3 truncate">{{ library.continueReadingBook.author }}</p>
+              <h4 class="text-white font-bold text-lg mb-1 leading-tight line-clamp-2">{{ library.continueReadingBook.title }}</h4>
+              <p class="text-white/40 text-sm font-medium mb-3 line-clamp-2">{{ library.continueReadingBook.author }}</p>
               <router-link 
                 @click.stop
                 :to="`/read/${library.continueReadingBook.$id}`" 
@@ -441,8 +441,8 @@ function formatDate(dateStr?: string) {
                            <Clock class="w-3 h-3 text-[#EEBA30]" />
                            <span class="text-[10px] font-black uppercase tracking-widest text-[#EEBA30]">{{ formatDate(item.session.last_read_at) }}</span>
                         </div>
-                        <h4 class="text-white font-bold text-lg mb-0.5 truncate leading-tight">{{ item.book?.title }}</h4>
-                        <p class="text-white/40 text-sm font-medium truncate mb-2">{{ item.book?.author }}</p>
+                        <h4 class="text-white font-bold text-lg mb-0.5 line-clamp-2 leading-tight">{{ item.book?.title }}</h4>
+                        <p class="text-white/40 text-sm font-medium line-clamp-2 mb-2">{{ item.book?.author }}</p>
                         
                         <div class="flex items-center gap-4">
                            <div class="flex items-center gap-1.5 px-3 py-1 bg-[#AE0001]/20 rounded-lg text-[10px] font-black text-[#AE0001] uppercase tracking-widest border border-[#AE0001]/30">

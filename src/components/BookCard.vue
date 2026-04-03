@@ -102,7 +102,7 @@ const handleReadClick = () => {
         {{ book.title }}
       </h3>
       
-      <p class="theme-text-soft text-[10px] font-medium mb-2 truncate">
+      <p class="theme-text-soft text-[10px] font-medium mb-2 line-clamp-2">
         {{ book.author }}
       </p>
 
