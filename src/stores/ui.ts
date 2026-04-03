@@ -43,9 +43,11 @@ export const useUIStore = defineStore('ui', {
         const auth = useAuthStore()
         const library = useLibraryStore()
 
-        // Core platform requirements
+        // 1. First, Manifest the User (Sequential Requirement)
+        await auth.init()
+
+        // 2. Then, Summon the Archives (Parallel allowed once ID is present)
         await Promise.all([
-          auth.init(),
           library.fetchBooks(),
           library.fetchUserSessions(),
           fetchCatalog()

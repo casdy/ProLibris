@@ -47,7 +47,12 @@ const stats = computed(() => {
   const sessions = library.sessions || []
   const totalPages = sessions.reduce((acc: number, s: { pages_turned?: number }) => acc + (s.pages_turned || 0), 0)
   const completed  = sessions.filter((s: { status: string }) => s.status === 'completed').length
-  const activeDays = new Set(sessions.map((s: { last_read_at?: string }) => s.last_read_at?.split('T')[0]).filter(Boolean)).size
+  const allDates = sessions.flatMap((s: { read_dates?: string[], last_read_at?: string }) => {
+    const dates = [...(s.read_dates || [])]
+    if (s.last_read_at) dates.push(s.last_read_at.split('T')[0])
+    return dates
+  })
+  const activeDays = new Set(allDates).size
   return [
     { title: 'Pages Read',    value: totalPages,   icon: BookOpen,      color: 'bg-blue-500 shadow-blue-500/30'   },
     { title: 'Completed',     value: completed,    icon: CheckCircle2,  color: 'bg-green-500 shadow-green-500/30' },
@@ -69,7 +74,7 @@ const hasBookshelfContent = computed(() =>
 </script>
 
 <template>
-  <div class="min-h-screen theme-bg theme-text flex flex-col font-outfit transition-colors duration-500">
+  <div class="min-h-screen theme-bg theme-text flex flex-col font-outfit">
 
     <!-- ═══ Navbar ═══ -->
     <nav class="sticky top-0 z-50 theme-nav backdrop-blur-3xl border-b theme-border px-6 py-4 lg:px-12">
@@ -111,9 +116,9 @@ const hasBookshelfContent = computed(() =>
           <button @click="ui.toggleTheme()" class="p-2.5 rounded-xl bg-black/10 dark:bg-white/5 shadow-inner theme-text-soft hover:theme-text transition-all duration-300">
             <component :is="ui.isDark ? Sun : Moon" class="w-5 h-5" />
           </button>
-          <router-link to="/profile" class="hidden sm:flex flex-col items-end group">
-            <p class="text-sm font-bold theme-text group-hover:text-[#EEBA30] transition-colors">{{ auth.user?.name }}</p>
-            <p class="text-xs theme-text-soft font-medium opacity-70 group-hover:opacity-100 transition-opacity">View Seeker Stats</p>
+          <router-link to="/profile" class="flex flex-col items-end group">
+            <p class="text-sm font-bold theme-text group-hover:text-[#EEBA30] transition-colors line-clamp-1">{{ auth.user?.name }}</p>
+            <p class="hidden md:block text-xs theme-text-soft font-medium opacity-70 group-hover:opacity-100 transition-opacity">View Seeker Stats</p>
           </router-link>
           <button @click="router.push('/farewell')" class="p-2.5 rounded-xl bg-black/10 dark:bg-white/5 shadow-inner theme-text-soft hover:theme-text hover:bg-red-500/10 transition-all duration-300 transform active:scale-95">
             <LogOut class="w-5 h-5" />

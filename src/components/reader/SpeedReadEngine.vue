@@ -126,12 +126,27 @@ const onKeydown = (e: KeyboardEvent) => {
   }
 }
 
-// Auto-scroll logic
+// Stabilized Threshold Scroll (Refinement Directive 2)
 watch(() => reader.currentWordIndex, () => {
   nextTick(() => {
     const el = scrollContainer.value?.querySelector('[data-word-active="true"]') as HTMLElement
-    if (el) {
-      el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    const container = scrollContainer.value
+    if (el && container) {
+      const elRect = el.getBoundingClientRect()
+      const containerRect = container.getBoundingClientRect()
+      
+      const relativeTop = elRect.top - containerRect.top
+      const relativeBottom = relativeTop + elRect.height
+      
+      const threshold = containerRect.height * 0.3 // 30% padding
+      
+      if (relativeTop < threshold) {
+        // Scroll up to keep word in focus area
+        container.scrollTo({ top: container.scrollTop + relativeTop - threshold, behavior: 'smooth' })
+      } else if (relativeBottom > containerRect.height - threshold) {
+        // Scroll down
+        container.scrollTo({ top: container.scrollTop + (relativeBottom - (containerRect.height - threshold)), behavior: 'smooth' })
+      }
     }
   })
 })
@@ -205,8 +220,8 @@ const handleSentenceClick = (id: number) => {
 const decrementSpeed = () => reader.setTargetWpm(reader.targetWpm - 25)
 const incrementSpeed = () => reader.setTargetWpm(reader.targetWpm + 25)
 
-const decrementZoom = () => emit('update-font-size', Math.max(50, props.fontSize - 10))
-const incrementZoom = () => emit('update-font-size', props.fontSize + 10)
+const decrementZoom = () => emit('update-font-size', Math.max(50, props.fontSize - 2))
+const incrementZoom = () => emit('update-font-size', props.fontSize + 2)
 </script>
 
 <template>
@@ -378,67 +393,84 @@ const incrementZoom = () => emit('update-font-size', props.fontSize + 10)
         <p class="text-xl font-medium">Ready to speed read? (No text found)</p>
       </div>
 
-      <div v-else class="select-none mb-32">
-        <p
-          v-for="(group, gIdx) in sentenceGroups"
-          :key="gIdx"
-          class="paragraph-block mb-8 leading-[2.6]"
-        >
-          <span
-            v-for="s in group.sentences"
-            :key="s.id"
-            class="sentence-wrap relative"
-            :class="{ 
-              'sentence-active': s.isCurrent && reader.isPlaying
-            }"
-            @click="handleSentenceClick(s.id)"
+      <div v-else class="select-none px-4 sm:px-12 py-10 pb-64">
+        <div class="focus-paper theme-card border theme-border rounded-[2rem] p-6 sm:p-12 md:p-16 shadow-2xl transition-all h-min max-w-2xl mx-auto overflow-hidden">
+          <p
+            v-for="(group, gIdx) in sentenceGroups"
+            :key="gIdx"
+            class="paragraph-block mb-10 leading-[2.5] whitespace-normal break-words"
           >
             <span
-              v-for="token in s.words"
-              :key="token.index"
-              class="paced-word-v3"
-              :class="{
-                'paced-active': token.index === reader.currentWordIndex,
-                'paced-read': token.index < reader.currentWordIndex,
-                'paced-unread': token.index > reader.currentWordIndex,
+              v-for="s in group.sentences"
+              :key="s.id"
+              class="sentence-wrap relative"
+              :class="{ 
+                'sentence-active': s.isCurrent && reader.isPlaying
               }"
-              :data-word-active="token.index === reader.currentWordIndex ? 'true' : undefined"
-            >{{ token.word }}</span>
-            <span> </span>
-          </span>
-        </p>
+              @click="handleSentenceClick(s.id)"
+            >
+              <span
+                v-for="token in s.words"
+                :key="token.index"
+                class="paced-word-v3"
+                :class="{
+                  'paced-active': token.index === reader.currentWordIndex,
+                  'paced-read': token.index < reader.currentWordIndex,
+                  'paced-unread': token.index > reader.currentWordIndex,
+                }"
+                :data-word-active="token.index === reader.currentWordIndex ? 'true' : undefined"
+              >{{ token.word }}</span>
+              <span> </span>
+            </span>
+          </p>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
+.focus-paper {
+  background: var(--bg-app); /* Matches theme but feels contained */
+  width: 100%;
+  max-width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+:global(.light) .focus-paper {
+  background: #fff;
+  color: #1a0f05;
+}
+
 .paced-word-v3 {
   display: inline;
-  padding: 0px 4px;
+  padding: 1px 4px;
   border-radius: 4px;
   font-family: var(--font-outfit), sans-serif;
-  transition: opacity 0.3s ease;
+  transition: opacity 0.3s ease, background-color 0.1s ease;
   cursor: default;
   position: relative;
   letter-spacing: -0.01em;
-  line-height: normal;
+  line-height: inherit;
 }
 
 .paced-read {
   color: var(--text-main);
-  opacity: 0.35;
+  opacity: 0.25;
 }
 
 .paced-unread {
   color: var(--text-main);
-  opacity: 1; /* Keep unread text fully visible and stable */
+  opacity: 1; 
 }
 
 .paced-active {
-  color: white !important; /* Force high contrast on highlight */
-  background: #AE0001; /* Scarlet brand background */
-  box-shadow: 0 0 10px rgba(174, 0, 1, 0.4);
+  color: white !important; 
+  background: #AE0001; 
+  box-shadow: 0 4px 12px rgba(174, 0, 1, 0.4);
   z-index: 10;
   border-radius: 4px;
 }
@@ -446,27 +478,17 @@ const incrementZoom = () => emit('update-font-size', props.fontSize + 10)
 :global(.dark) .paced-active {
   color: #fff !important;
   background: #AE0001;
-  box-shadow: 0 0 15px rgba(174, 0, 1, 0.3);
 }
 
 .sentence-wrap {
-  border-radius: 12px;
+  border-radius: 8px;
   transition: all 0.3s ease;
-  padding: 4px 6px;
+  padding: 2px 0px;
   cursor: pointer;
   margin: 0px;
-  line-height: 2.4; /* More breathable for focus */
 }
 
-@media (max-width: 768px) {
-  .sentence-wrap {
-    line-height: 2.8;
-  }
-}
-
-.sentence-active {
-  background: rgba(174, 0, 1, 0.05); /* Very subtle Scarlet line focus */
-}
+/* Removed sentence-active background to prevent layout jitter, kept it clean */
 
 .paragraph-block {
   transition: opacity 0.5s ease;

@@ -108,13 +108,13 @@ export const useReaderStore = defineStore('reader', {
 
   actions: {
     // ─── INITIALIZATION ─────────────────────────────────────────
-    async initBook(book: any, bookId: string) {
-      this.bookInstance = book
+    async initBook(book: unknown, bookId: string) {
+      this.bookInstance = book as any
       this.bookId = bookId
       
       // Build spine item list
       const items: SpineItem[] = []
-      book.spine.each((section: any, index: number) => {
+      ;(book as any).spine.each((section: { label: string; href: string }, index: number) => {
         items.push({
           index,
           label: section.label || `Section ${index + 1}`,
@@ -440,18 +440,24 @@ export const useReaderStore = defineStore('reader', {
       this.chapterProgress = 100
       this.showAnalyticsModal = true
 
-      await this.saveSessionToAppwrite()
+      // If this was the last chapter, mark book as completed
+      const isLastChapter = this.currentSpineIndex === this.spineItems.length - 1
+      await this.saveSessionToAppwrite(isLastChapter ? 'completed' : 'reading')
     },
 
-    async saveSessionToAppwrite() {
+    async saveSessionToAppwrite(statusOverride?: 'reading' | 'completed') {
       try {
         const library = useLibraryStore()
         const auth = useAuthStore()
         if (!auth.user || !this.bookId) return
 
-        const sessionData: Record<string, any> = {
+        const sessionData: Record<string, unknown> = {
           mode_preference: this.activeMode,
           target_read_wpm: this.targetWpm,
+        }
+        
+        if (statusOverride) {
+          sessionData.status = statusOverride
         }
 
         if (this.activeMode === 'typing') {

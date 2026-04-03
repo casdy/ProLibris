@@ -26,6 +26,7 @@ export interface ReadingSession extends Models.Document {
   avg_type_wpm?: number
   avg_accuracy?: number
   problem_keys?: string[]
+  read_dates?: string[]
 }
 
 function shuffleArray<T>(arr: T[]): T[] {
@@ -200,6 +201,7 @@ export const useLibraryStore = defineStore('library', {
 
       const response = await databases.listDocuments<ReadingSession>(DATABASE_ID, SESSIONS_COLLECTION_ID, [
         Query.equal('user_id', auth.user.$id),
+        Query.limit(5000)
       ])
       this.sessions = response.documents
     },
@@ -209,12 +211,19 @@ export const useLibraryStore = defineStore('library', {
       if (!auth.user) return
 
       const session = this.sessions.find(s => s.book_id === bookId)
-      const data: Record<string, unknown> = {
-        progress_cfi: cfi,
-        last_read_at: new Date().toISOString(),
-        status: 'reading',
-        pages_turned: (session?.pages_turned || 0) + pagesInc,
-      }
+    const today = new Date().toISOString().split('T')[0]
+    const updatedDates = [...(session?.read_dates || [])]
+    if (!updatedDates.includes(today)) {
+      updatedDates.push(today)
+    }
+
+    const data: Record<string, unknown> = {
+      progress_cfi: cfi,
+      last_read_at: new Date().toISOString(),
+      status: 'reading',
+      pages_turned: (session?.pages_turned || 0) + pagesInc,
+      read_dates: updatedDates,
+    }
 
       // Merge analytics data if provided
       if (analyticsData) {

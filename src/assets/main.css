@@ -57,14 +57,19 @@
 
 @layer base {
   html {
-    @apply transition-colors duration-300;
+    @apply transition-colors duration-75;
+    overscroll-behavior-y: contain;
+    height: 100%;
   }
   
   body {
     background-color: var(--bg-app);
     color: var(--text-main);
-    @apply transition-colors duration-300 min-h-screen;
+    @apply transition-colors duration-75 min-h-screen;
     font-family: var(--font-outfit);
+    overscroll-behavior-y: contain;
+    touch-action: pan-y;
+    overflow-x: hidden;
   }
 
   h1, h2, h3, h4, h5, h6 {

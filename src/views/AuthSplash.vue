@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { onMounted, computed, ref } from 'vue'
+import { onMounted, computed, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useUIStore } from '@/stores/ui'
 import { Sparkles, Flame, MoveRight, LogIn } from 'lucide-vue-next'
 import AppLogo from '@/components/AppLogo.vue'
 
@@ -12,19 +13,42 @@ const auth = useAuthStore()
 const isWelcome = computed(() => route.name === 'welcome')
 const userName = ref(auth.user?.name?.split(' ')[0] || 'Seeker')
 
+const ui = useUIStore()
+
 onMounted(async () => {
   if (!isWelcome.value) {
-    // Perform actual logout during the farewell splash
+    // Farewell: Perform logout and then redirect to login
     await auth.logout()
+    setTimeout(() => router.push('/login'), 2000)
+    return
   }
   
-  setTimeout(() => {
-    if (isWelcome.value) {
-      router.push('/dashboard')
-    } else {
-      router.push('/login')
-    }
-  }, 2500)
+  // Welcome: Wait for both animation (min 2s) and platform data to be ready
+  const minTime = new Promise(resolve => setTimeout(resolve, 2000))
+  
+  try {
+    // Wait for core data to load in parallel with the welcome animation
+    await Promise.all([
+      minTime,
+      // Check if already initialized, otherwise wait
+      new Promise<void>((resolve) => {
+        if (ui.isInitialized) resolve()
+        else {
+          const unwatch = watch(() => ui.isInitialized, (val: boolean) => {
+            if (val) {
+              unwatch()
+              resolve()
+            }
+          })
+        }
+      })
+    ])
+    
+    router.push('/dashboard')
+  } catch (error) {
+    console.warn('Welcome redirect fallback triggered:', error)
+    router.push('/dashboard')
+  }
 })
 </script>
 

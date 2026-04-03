@@ -27,6 +27,7 @@ const router = createRouter({
     },
     {
       path: '/welcome',
+      alias: '/dashboard/welcome',
       name: 'welcome',
       component: () => import('@/views/AuthSplash.vue'),
     },
@@ -40,6 +41,11 @@ const router = createRouter({
       name: 'reader',
       component: () => import('@/views/ReaderView.vue'),
       meta: { requiresAuth: true },
+    },
+    // Fallback for unmatched routes to prevent blank screens
+    {
+      path: '/:pathMatch(.*)*',
+      redirect: '/dashboard',
     },
   ],
 })

@@ -1,18 +1,19 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { useLibraryStore } from '@/stores/library'
+import { useLibraryStore, type ReadingSession } from '@/stores/library'
 import { 
-  ArrowLeft, BookOpen, Target, Zap, 
+  ArrowLeft, BookOpen, Target, Zap, Flame, 
   Award, Library, Clock, Heart, Sparkles, MoveRight,
-  TrendingUp, Star
+  TrendingUp, Star, Loader2
 } from 'lucide-vue-next'
 import AppLogo from '@/components/AppLogo.vue'
 
 const router = useRouter()
 const auth = useAuthStore()
 const library = useLibraryStore()
+const isSyncing = ref(true)
 
 const stats = computed(() => {
   const sessions = library.sessions || []
@@ -26,7 +27,14 @@ const stats = computed(() => {
   const countAcc = sessions.filter(s => s.avg_accuracy).length
   const avgAcc = countAcc > 0 ? Math.round(totalAcc / countAcc) : 0
 
-  return { totalPages, completed, reading, maxWpm, avgAcc }
+  const allDates = sessions.flatMap((s: ReadingSession) => {
+    const dates = [...(s.read_dates || [])]
+    if (s.last_read_at) dates.push(s.last_read_at.split('T')[0])
+    return dates
+  })
+  const totalDays = new Set(allDates).size
+
+  return { totalPages, completed, reading, maxWpm, avgAcc, totalDays }
 })
 
 const favoriteGenre = computed(() => {
@@ -56,9 +64,9 @@ const wizardingRank = computed(() => {
 const goBack = () => router.push('/dashboard')
 
 onMounted(async () => {
-  if (library.sessions.length === 0) {
-    await library.fetchUserSessions()
-  }
+  isSyncing.value = true
+  await library.fetchUserSessions()
+  isSyncing.value = false
 })
 </script>
 
@@ -117,9 +125,17 @@ onMounted(async () => {
       </header>
 
       <!-- Main Statistics Grid -->
-      <section class="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <section class="grid md:grid-cols-2 lg:grid-cols-4 gap-6 relative min-h-[300px]">
+        <!-- Loading Overlay -->
+        <Transition name="fade">
+          <div v-if="isSyncing" class="absolute inset-0 z-30 flex flex-col items-center justify-center bg-inherit/40 backdrop-blur-md rounded-[3rem] border theme-border">
+            <Loader2 class="w-12 h-12 text-[#EEBA30] animate-spin mb-4" />
+            <p class="text-xs font-black uppercase tracking-[0.3em] theme-text opacity-60">Summoning archival stats...</p>
+          </div>
+        </Transition>
+
         <!-- Pages Read -->
-        <div class="theme-card p-8 rounded-[2.5rem] border theme-border relative overflow-hidden group hover:border-[#EEBA30]/50 transition-all">
+        <div class="theme-card p-8 rounded-[2.5rem] border theme-border relative overflow-hidden group hover:border-[#EEBA30]/50 transition-all" :class="{ 'opacity-20 blur-sm': isSyncing }">
           <BookOpen class="w-10 h-10 text-[#EEBA30] mb-6 transform group-hover:scale-110 transition-transform" />
           <h4 class="text-5xl font-black theme-text font-cinzel mb-2">{{ stats.totalPages.toLocaleString() }}</h4>
           <p class="text-sm font-bold theme-text-soft uppercase tracking-widest opacity-60">Total Pages Read</p>
@@ -127,7 +143,7 @@ onMounted(async () => {
         </div>
 
         <!-- Mastery -->
-        <div class="theme-card p-8 rounded-[2.5rem] border theme-border relative overflow-hidden group hover:border-[#AE0001]/50 transition-all">
+        <div class="theme-card p-8 rounded-[2.5rem] border theme-border relative overflow-hidden group hover:border-[#AE0001]/50 transition-all" :class="{ 'opacity-20 blur-sm': isSyncing }">
           <Zap class="w-10 h-10 text-[#AE0001] mb-6 transform group-hover:scale-110 transition-transform" />
           <h4 class="text-5xl font-black theme-text font-cinzel mb-2">{{ stats.maxWpm }}</h4>
           <p class="text-sm font-bold theme-text-soft uppercase tracking-widest opacity-60">Highest WPM Mastery</p>
@@ -135,15 +151,23 @@ onMounted(async () => {
         </div>
 
         <!-- Accuracy -->
-        <div class="theme-card p-8 rounded-[2.5rem] border theme-border relative overflow-hidden group hover:border-emerald-500/50 transition-all">
+        <div class="theme-card p-8 rounded-[2.5rem] border theme-border relative overflow-hidden group hover:border-emerald-500/50 transition-all" :class="{ 'opacity-20 blur-sm': isSyncing }">
           <Target class="w-10 h-10 text-emerald-500 mb-6 transform group-hover:scale-110 transition-transform" />
           <h4 class="text-5xl font-black theme-text font-cinzel mb-2">{{ stats.avgAcc }}%</h4>
           <p class="text-sm font-bold theme-text-soft uppercase tracking-widest opacity-60">Average Core Accuracy</p>
           <div class="absolute -bottom-8 -right-8 w-24 h-24 bg-emerald-500/5 rounded-full blur-2xl"></div>
         </div>
 
+        <!-- Reading Days -->
+        <div class="theme-card p-8 rounded-[2.5rem] border theme-border relative overflow-hidden group hover:border-orange-500/50 transition-all" :class="{ 'opacity-20 blur-sm': isSyncing }">
+          <Flame class="w-10 h-10 text-orange-500 mb-6 transform group-hover:scale-110 transition-transform" />
+          <h4 class="text-5xl font-black theme-text font-cinzel mb-2">{{ stats.totalDays }}</h4>
+          <p class="text-sm font-bold theme-text-soft uppercase tracking-widest opacity-60">Total Reading Days</p>
+          <div class="absolute -bottom-8 -right-8 w-24 h-24 bg-orange-500/5 rounded-full blur-2xl group-hover:bg-orange-500/10 transition-all"></div>
+        </div>
+
         <!-- Collections -->
-        <div class="theme-card p-8 rounded-[2.5rem] border theme-border relative overflow-hidden group hover:border-amber-500/50 transition-all">
+        <div class="theme-card p-8 rounded-[2.5rem] border theme-border relative overflow-hidden group hover:border-amber-500/50 transition-all" :class="{ 'opacity-20 blur-sm': isSyncing }">
           <Library class="w-10 h-10 text-amber-500 mb-6 transform group-hover:scale-110 transition-transform" />
           <h4 class="text-5xl font-black theme-text font-cinzel mb-2">{{ library.likedBooks.length }}</h4>
           <p class="text-sm font-bold theme-text-soft uppercase tracking-widest opacity-60">Vaulted Favorites</p>

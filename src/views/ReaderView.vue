@@ -29,8 +29,13 @@ const initialCfi = ref<string | undefined>(undefined)
 let saveTimeout: ReturnType<typeof setTimeout> | null = null
 const saveProgress = (cfi: string) => {
   if (saveTimeout) clearTimeout(saveTimeout)
+  
+  // Intelligent Mastery Detection
+  const isLastChapter = reader.currentSpineIndex === (reader.spineItems.length - 1)
+  const status = isLastChapter ? 'completed' : 'reading'
+  
   saveTimeout = setTimeout(() => {
-    library.updateProgress(bookId, cfi, 1)
+    library.updateProgress(bookId, cfi, 1, { status })
   }, 3000)
 }
 
@@ -236,7 +241,7 @@ onUnmounted(() => {
               <Type class="w-4 h-4" />
               Font Size: {{ fontSize }}%
             </label>
-            <input type="range" v-model="fontSize" min="50" max="250" step="10" class="w-full accent-[#f02e65]" />
+            <input type="range" v-model="fontSize" min="50" max="250" step="2" class="w-full accent-[#f02e65]" />
           </div>
 
           <div class="grid grid-cols-2 gap-4">
