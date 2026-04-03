@@ -6,9 +6,30 @@ const reader = useReaderStore()
 const container = ref<HTMLElement | null>(null)
 const activeCharRef = ref<HTMLElement | null>(null)
 
+const mobileInput = ref<HTMLInputElement | null>(null)
+
+// Focus management
+const syncFocus = () => {
+  mobileInput.value?.focus()
+}
+
 // Keystroke handler
 const onKeydown = (e: KeyboardEvent) => {
+  // Desktop still uses this for common flow
   reader.handleKeystroke(e)
+  // Clear input to avoid double-trigger or buffer buildup
+  if (mobileInput.value) mobileInput.value.value = ""
+  nextTick(scrollToActive)
+}
+
+// Mobile-specific input handler
+const onInput = (e: Event) => {
+  const input = e.target as HTMLInputElement
+  const char = input.value.slice(-1)
+  if (char) {
+    reader.handleTypingInput(char)
+    input.value = "" // Always clear
+  }
   nextTick(scrollToActive)
 }
 
@@ -27,6 +48,7 @@ watch(() => reader.currentCharIndex, () => {
 
 onMounted(() => {
   window.addEventListener('keydown', onKeydown)
+  syncFocus()
   nextTick(scrollToActive)
 })
 
@@ -75,12 +97,24 @@ const paragraphGroups = computed(() => {
       </p>
     </div>
 
-    <!-- Typing area -->
     <div
       ref="container"
-      class="flex-1 w-full max-w-3xl overflow-y-auto px-6 sm:px-10 py-8 reader-scroll-container"
-      @click="() => { /* Keep focus on window for keydown */ }"
+      class="flex-1 w-full max-w-3xl overflow-y-auto px-6 sm:px-10 py-8 reader-scroll-container cursor-text"
+      @click="syncFocus"
     >
+      <!-- Hidden input for mobile keyboard -->
+      <input
+        ref="mobileInput"
+        type="text"
+        class="absolute opacity-0 pointer-events-none"
+        @input="onInput"
+        @keydown="onKeydown"
+        autocorrect="off"
+        autocapitalize="off"
+        spellcheck="false"
+        autocomplete="off"
+      />
+
       <div v-if="reader.isExtracting" class="flex items-center justify-center h-full">
         <div class="w-10 h-10 border-4 border-[#f02e65]/20 border-t-[#f02e65] rounded-full animate-spin" />
       </div>

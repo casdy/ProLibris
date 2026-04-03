@@ -215,9 +215,17 @@ export const useReaderStore = defineStore('reader', {
         'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End',
         'PageUp', 'PageDown', 'Insert', 'Delete', 'F1', 'F2', 'F3', 'F4',
         'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12']
+      
       if (ignoredKeys.includes(event.key)) return
-
+      
+      // Allow default for F-keys and system shortcuts if not handled
       event.preventDefault()
+      this.handleTypingInput(event.key)
+    },
+
+    handleTypingInput(key: string) {
+      if (this.activeMode !== 'typing') return
+      if (this.currentCharIndex >= this.charTokens.length) return
 
       // Start timer on first keystroke
       if (this.sessionStats.startTime === null) {
@@ -227,7 +235,7 @@ export const useReaderStore = defineStore('reader', {
       const currentToken = this.charTokens[this.currentCharIndex]
 
       // Handle backspace — correct an error
-      if (event.key === 'Backspace') {
+      if (key === 'Backspace') {
         if (this.isTypingError) {
           this.isTypingError = false
           currentToken.status = 'pending'
@@ -252,9 +260,9 @@ export const useReaderStore = defineStore('reader', {
       // Check correctness
       let isCorrect = false
       if (currentToken.isNewline) {
-        isCorrect = event.key === 'Enter' || event.key === ' '
+        isCorrect = key === 'Enter' || key === ' '
       } else {
-        isCorrect = event.key === currentToken.char
+        isCorrect = key === currentToken.char
       }
 
       if (isCorrect) {
