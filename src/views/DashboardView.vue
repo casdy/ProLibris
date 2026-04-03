@@ -81,7 +81,7 @@ const hasBookshelfContent = computed(() =>
       <div class="max-w-7xl mx-auto flex items-center justify-between">
         <div class="flex items-center gap-3">
           <AppLogo size="md" class="hover:scale-110 transition-transform cursor-pointer" />
-          <h1 class="text-xl font-black theme-text tracking-widest uppercase font-cinzel text-[#EEBA30]">Prolibris</h1>
+          <h1 class="text-xl font-black theme-text tracking-widest uppercase font-cinzel text-[#EEBA30] hidden sm:block">Prolibris</h1>
         </div>
 
         <div class="flex items-center gap-4">
@@ -92,20 +92,20 @@ const hasBookshelfContent = computed(() =>
               :class="activeTab === 'discover'
                 ? 'bg-[#AE0001] text-white shadow-lg shadow-[#AE0001]/20'
                 : 'theme-text-soft hover:theme-text'"
-              class="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-bold transition-all duration-200"
+              class="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-2 rounded-lg text-sm font-bold transition-all duration-200"
             >
               <Sparkles class="w-4 h-4" />
-              <span class="hidden sm:inline">Discover</span>
+              <span class="hidden md:inline">Discover</span>
             </button>
             <button
               @click="activeTab = 'bookshelf'"
               :class="activeTab === 'bookshelf'
                 ? 'bg-[#AE0001] text-white shadow-lg shadow-[#AE0001]/20'
                 : 'theme-text-soft hover:theme-text'"
-              class="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-bold transition-all duration-200 relative"
+              class="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-2 rounded-lg text-sm font-bold transition-all duration-200 relative"
             >
               <Library class="w-4 h-4" />
-              <span class="hidden sm:inline">Bookshelf</span>
+              <span class="hidden md:inline">Bookshelf</span>
               <span
                 v-if="hasBookshelfContent && activeTab !== 'bookshelf'"
                 class="absolute -top-0.5 -right-0.5 w-2 h-2 bg-[#EEBA30] rounded-full border-2 theme-border"
@@ -146,9 +146,9 @@ const hasBookshelfContent = computed(() =>
 
           <div v-if="library.continueReadingBook" class="z-10 mt-8 flex flex-col sm:flex-row items-center gap-6 p-4 bg-white/5 backdrop-blur-md rounded-3xl border border-white/5 shadow-2xl">
             <img :src="library.continueReadingBook.cover_url" class="h-28 w-20 object-cover rounded-xl shadow-lg shadow-black/20" />
-            <div class="flex-1">
+            <div class="flex-1 min-w-0">
               <p class="text-[10px] uppercase font-black tracking-widest text-[#EEBA30] mb-1">Continue Reading</p>
-              <h4 class="text-white font-bold text-lg mb-1 leading-tight line-clamp-1 truncate">{{ library.continueReadingBook.title }}</h4>
+              <h4 class="text-white font-bold text-lg mb-1 leading-tight truncate">{{ library.continueReadingBook.title }}</h4>
               <p class="text-white/40 text-sm font-medium mb-3 truncate">{{ library.continueReadingBook.author }}</p>
               <router-link :to="`/read/${library.continueReadingBook.$id}`" class="inline-flex items-center gap-2 bg-[#AE0001] text-white px-5 py-2 rounded-xl text-sm font-bold shadow-lg shadow-[#AE0001]/20 hover:scale-105 transition-transform active:scale-95">
                 Jump Back In <ChevronRight class="w-4 h-4" />

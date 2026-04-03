@@ -74,7 +74,7 @@ interface ShelfEntry {
   isReading: boolean
 }
 
-function getEntriesForBooks(books: { $id: string; title: string; author: string; [key: string]: any }[]): ShelfEntry[] {
+function getEntriesForBooks(books: { $id: string; title: string; author: string; [key: string]: unknown }[]): ShelfEntry[] {
   return books.map((book, idx) => {
     const session = library.sessions.find(s => s.book_id === book.$id)
     return {
@@ -88,7 +88,14 @@ function getEntriesForBooks(books: { $id: string; title: string; author: string;
 }
 
 // No longer chunking to allow infinite horizontal scroll per deck
-const readingEntries = computed(() => getEntriesForBooks(library.readingBooks))
+const readingEntries = computed(() => {
+  const books = [...library.readingBooks]
+  const lastRead = library.continueReadingBook
+  if (lastRead && !books.find(b => b.$id === lastRead.$id)) {
+    books.unshift(lastRead)
+  }
+  return getEntriesForBooks(books)
+})
 const likedEntries   = computed(() => getEntriesForBooks(library.likedBooks))
 const completedEntries = computed(() => getEntriesForBooks(library.completedBooks))
 
@@ -138,7 +145,7 @@ const statusColor: Record<string, string> = {
 // ─── Horizontal Scroll Logic ─────────────────────────────────────
 const scrollContainers = ref<Record<string, HTMLElement | null>>({})
 
-function setScrollRef(key: string, el: any) {
+function setScrollRef(key: string, el: unknown) {
   if (el) scrollContainers.value[key] = el as HTMLElement
 }
 
@@ -344,7 +351,10 @@ function scrollShelf(key: string, dir: 'left' | 'right') {
 .nav-btn { position: absolute; top: 1.5rem; bottom: 22px; z-index: 20; width: 3.5rem; background: rgba(5, 2, 1, 0.4); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; color: #D4AF37; opacity: 0; transition: all 0.3s ease; border: 1px solid rgba(212, 175, 55, 0.1); cursor: pointer; }
 .group\/nav:hover .nav-btn { opacity: 1; }
 .nav-btn:hover { background: #8B1A1A; color: #F0C040; border-color: rgba(212, 175, 55, 0.4); }
-.books-row { display: flex; align-items: flex-end; gap: 3px; padding: 0 4rem; padding-top: 1.5rem; overflow-x: auto; scrollbar-width: none; }
+.books-row { display: flex; align-items: flex-end; gap: 3px; padding: 0 4rem; padding-top: 1.5rem; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; }
+@media (max-width: 768px) {
+  .books-row { padding: 0 1.5rem; }
+}
 .books-row::-webkit-scrollbar { display: none; }
 .shelf-plank { height: 22px; background: linear-gradient(180deg, #8B5E2C 0%, #6B4420 40%, #4A2E14 70%, #3D2410 100%); box-shadow: 0 4px 16px rgba(0,0,0,0.7), 0 2px 4px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,200,100,0.15), inset 0 -1px 0 rgba(0,0,0,0.5); border-top: 1px solid rgba(220, 160, 60, 0.25); position: relative; margin: 0 0.5rem; border-radius: 0 0 4px 4px; }
 .shelf-edge { position: absolute; bottom: 0; left: 0; right: 0; height: 5px; background: linear-gradient(180deg, #2A1600, #1A0E00); border-radius: 0 0 4px 4px; }
@@ -353,7 +363,7 @@ function scrollShelf(key: string, dir: 'left' | 'right') {
 .book-spine { position: relative; border-radius: 2px 3px 3px 2px; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; cursor: pointer; transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.2s ease, box-shadow 0.2s ease; box-shadow: inset -2px 0 6px rgba(0,0,0,0.4), inset 2px 0 4px rgba(255,255,255,0.05), 2px 0 8px rgba(0,0,0,0.6), -1px 0 2px rgba(0,0,0,0.3); }
 .book-spine.pulled-out { transform: translateY(-32px) !important; filter: brightness(1.3) !important; box-shadow: inset -2px 0 6px rgba(0,0,0,0.4), inset 2px 0 4px rgba(255,255,255,0.08), 0 20px 40px rgba(0,0,0,0.8), 0 0 30px var(--accent, #FFD700), -1px 0 2px rgba(0,0,0,0.3); }
 .spine-highlight { position: absolute; top: 0; left: 0; width: 3px; height: 100%; background: linear-gradient(180deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.04) 100%); }
-.spine-title { writing-mode: vertical-rl; text-orientation: mixed; transform: rotate(180deg); font-size: 10px; font-weight: 700; letter-spacing: 0.05em; line-height: 1.2; text-align: center; padding: 6px 3px; max-height: 90%; overflow: hidden; text-shadow: 0 1px 3px rgba(0,0,0,0.8); font-family: 'Outfit', serif; }
+.spine-title { writing-mode: vertical-rl; text-orientation: mixed; transform: rotate(180deg); font-size: 10px; font-weight: 700; letter-spacing: 0.1em; line-height: 1.1; text-align: center; padding: 8px 4px; height: 100%; max-height: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 1px 3px rgba(0,0,0,0.8); font-family: 'Outfit', serif; }
 .spine-band { position: absolute; top: 18px; left: 0; right: 0; height: 3px; opacity: 0.6; }
 .spine-glow { position: absolute; inset: 0; pointer-events: none; }
 .reading-glow { box-shadow: inset 0 0 12px rgba(174, 0, 1, 0.4); animation: readingPulse 2.5s ease-in-out infinite; }

@@ -86,7 +86,7 @@ export const useLibraryStore = defineStore('library', {
     },
     continueReadingBook(state) {
       const lastSession = [...state.sessions]
-        .filter(s => s.status === 'reading')
+        .filter(s => s.last_read_at)
         .sort((a, b) => new Date(b.last_read_at || 0).getTime() - new Date(a.last_read_at || 0).getTime())[0]
       return state.allBooks.find(b => b.$id === lastSession?.book_id)
     },
