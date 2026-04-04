@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { useLibraryStore } from '@/stores/library'
 import {
-  X, BookOpen, Clock, Zap, ChevronRight, CheckCircle2, Play, Keyboard, Star, Sparkles, RefreshCw, Heart, ArrowRight
+  X, BookOpen, Clock, Zap, ChevronRight, CheckCircle2, Play, Keyboard, Star, Sparkles, RefreshCw, Heart
 } from 'lucide-vue-next'
 
 import SectionControls from './SectionControls.vue'
@@ -265,8 +265,8 @@ function scrollShelf(dir: 'left' | 'right') {
           <div class="parchment-divider"><span>✦</span></div>
           <div class="modal-actions">
             <button @click="toggleFavorite" class="btn-secondary flex items-center justify-center gap-2">
-              <ArrowRight class="w-4 h-4" />
-              Add to Bookshelf
+              <Heart class="w-4 h-4" :class="{ 'fill-[#AE0001] text-[#AE0001]': selected.isLiked }" />
+              {{ selected.isLiked ? 'Remove from Favs' : 'Add to Favorites' }}
             </button>
             <router-link :to="`/read/${selected.book.$id}`" @click="closeModal" class="btn-primary">
               <Play class="w-4 h-4 fill-current" />

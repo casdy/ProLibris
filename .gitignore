@@ -43,10 +43,12 @@ Desktop.ini
 .env.local
 .env.*.local
 
-# Development Scripts (Ignored because they contain secret API keys)
+# Development & Audit Scripts
 scripts/seed.ts
 scripts/migrate-schema.ts
 scripts/extract_owl.py
+scripts/auditDatabase.js
+scripts/deepAudit.js
 scripts/*.local.ts
 
 # Temporal Extraction Artifacts

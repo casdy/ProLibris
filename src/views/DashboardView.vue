@@ -91,6 +91,14 @@ function formatDate(dateStr?: string) {
   if (days < 7)   return `${days}d ago`
   return d.toLocaleDateString()
 }
+
+const greeting = computed(() => {
+  const hour = new Date().getHours()
+  if (hour < 12) return 'Good morning'
+  if (hour < 17) return 'Good afternoon'
+  if (hour < 22) return 'Good evening'
+  return 'Good night'
+})
 </script>
 
 <template>
@@ -156,7 +164,7 @@ function formatDate(dateStr?: string) {
           <div class="absolute top-0 right-0 w-[40%] h-full bg-gradient-to-l from-amber-500/10 to-transparent blur-3xl opacity-20 pointer-events-none" />
           <div class="z-10">
             <h2 class="text-2xl sm:text-3xl lg:text-5xl font-bold text-white mb-4 tracking-tight leading-tight truncate">
-              Good evening, <br/>
+              {{ greeting }}, <br/>
               <span class="text-[#EEBA30]">{{ auth.user?.name?.split(' ')[0] }}</span>.
             </h2>
             <p class="text-white/60 text-lg font-medium max-w-md">
@@ -278,11 +286,11 @@ function formatDate(dateStr?: string) {
             <BookstoreView />
           </div>
   
-          <!-- Gutendex Explorer Grid (Live from API) -->
+          <!-- Complete Archive Grid -->
           <div class="space-y-12 mt-16">
             <div v-if="!isSearching" class="flex items-center gap-4 mb-4">
                <div class="h-px flex-1 bg-gradient-to-r from-transparent via-theme-border to-transparent opacity-30" />
-               <span class="text-sm font-black uppercase tracking-[0.3em] theme-text-soft opacity-40">Your Archive</span>
+               <span class="text-sm font-black uppercase tracking-[0.3em] theme-text-soft opacity-40">Complete Collection</span>
                <div class="h-px flex-1 bg-gradient-to-r from-transparent via-theme-border to-transparent opacity-30" />
             </div>
   
@@ -296,9 +304,9 @@ function formatDate(dateStr?: string) {
               <p class="text-sm theme-text-soft opacity-40 mt-2">Try adjusting your filters or search terms</p>
             </div>
             
-          <div v-else class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4 lg:gap-5">
-            <BookCard v-for="book in catalog.books.value" :key="book?.$id || book?.id" :book="book" />
-          </div>
+            <div v-else class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4 lg:gap-5">
+              <BookCard v-for="book in catalog.books.value" :key="book?.$id || book?.id" :book="book" />
+            </div>
   
             <!-- Pagination -->
             <BookPagination 
@@ -310,7 +318,7 @@ function formatDate(dateStr?: string) {
             />
           </div>
         </section>
-    </main>
+      </main>
 
     <!-- ═══════ BOOKSHELF TAB ═══════ -->
     <main v-else class="flex-1 w-full animate-fade-in">
@@ -346,14 +354,10 @@ function formatDate(dateStr?: string) {
           <a href="https://github.com/casdy" target="_blank" class="hover:text-[#EEBA30] transition-colors flex items-center gap-2">
             Built with <span class="text-[#AE0001]">❤️</span> by @casdy
           </a>
-          <span class="hidden md:inline opacity-20">|</span>
-          <a href="https://www.gutenberg.org/" target="_blank" class="hover:text-[#EEBA30] transition-colors">
-            Ebooks sourced from Gutenberg
-          </a>
         </div>
         
         <p class="theme-text-soft text-xs font-medium opacity-60">
-          Powered by <span class="text-[#AE0001] font-bold">Appwrite</span> & <span class="text-[#EEBA30] font-bold">Gutendex</span>
+          Powered by <span class="text-[#AE0001] font-bold">Appwrite</span>
         </p>
 
         <div class="pt-4 border-t theme-border opacity-20">

@@ -13,10 +13,10 @@ ProLibris is a high-fidelity, magical reading portal designed to transform your 
 - **Persistent Decks**: Intelligent organization into *Continue Reading*, *Vaulted Favorites*, and *Mastered Chronicles*.
 - **Parchment Analytics**: Detailed metadata presented on animated parchment, featuring real-time reading intensity and archival progress.
 
-### 🦉 The Magical Owl (Discovery Engine)
-- **High-Performance Hybridization**: Near-instant rendering of thousands of books. All searches and navigations prioritize your private Appwrite vault.
-- **Eager Pre-fetching**: The Owl anticipates your archival journey, pre-caching neighboring pages in the background for a zero-latency experience.
-- **Universal Archive**: Seamless fallback to the Gutenberg public catalog with automated background backfilling for a non-breaking library view.
+### 🦉 The Archival Sanctuary (Discovery Engine)
+- **High-Performance Native Catalog**: Near-instant rendering of thousands of books. All searches and navigations are powered directly by your private Appwrite vault.
+- **Eager Pre-fetching**: The system anticipates your archival journey, pre-caching neighboring pages in the background for a zero-latency experience.
+- **Global Search**: Search your entire synchronized collection with server-side precision using Appwrite Queries.
 
 ### ⚡ Professional Reading Engines
 - **Standard Mode**: Distraction-free, premium EPUB rendering with precision typography.
@@ -45,7 +45,6 @@ ProLibris is a high-fidelity, magical reading portal designed to transform your 
 ### 1. Prerequisites
 - **Node.js (v18+)**
 - **Appwrite Instance**: (Cloud or Self-hosted Archival Backend)
-- **API Access**: Access to `https://gutendex.com` (Universal Catalog Backup).
 
 ### 2. Initialization
 ```bash

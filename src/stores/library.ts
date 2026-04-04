@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { databases, storage, DATABASE_ID, BOOKS_COLLECTION_ID, SESSIONS_COLLECTION_ID, BUCKET_ID } from '@/lib/appwrite'
+import { databases, DATABASE_ID, BOOKS_COLLECTION_ID, SESSIONS_COLLECTION_ID } from '@/lib/appwrite'
 import { ID, Query, type Models } from 'appwrite'
 import { useAuthStore } from './auth'
 
@@ -64,8 +64,7 @@ export const useLibraryStore = defineStore('library', {
     
     // UI state for filtering/sorting
     enchantedFilter: { genre: '', sort: 'title' },
-    discoverFilter: { genre: '', sort: 'title' },
-    activeSummons: {} as Record<number, boolean>
+    discoverFilter: { genre: '', sort: 'title' }
   }),
   getters: {
     books(state) {
@@ -124,7 +123,7 @@ export const useLibraryStore = defineStore('library', {
       this.loading = true
       try {
         // Fetch ALL books from the database (paginated, 100 per request)
-        let allDocs: Book[] = []
+        const allDocs: Book[] = []
         let offset = 0
         const limit = 100
         let hasMore = true
@@ -265,74 +264,5 @@ export const useLibraryStore = defineStore('library', {
        }
        await this.fetchUserSessions()
     },
-
-    async importInBackground(gutenbergId: number, metadata: Partial<Book>) {
-      const { useUIStore } = await import('./ui')
-      const ui = useUIStore()
-      
-      if (this.activeSummons[gutenbergId]) {
-        ui.showNotification(`Already summoning "${metadata.title}"`, 'info')
-        return
-      }
-
-      const notificationId = ui.showNotification(`Summoning "${metadata.title}" into your archive...`, 'info', 0)
-      this.activeSummons[gutenbergId] = true
-
-      try {
-        const book = await this.importBookFromGutenberg(gutenbergId, metadata)
-        if (book) {
-          ui.removeNotification(notificationId)
-          ui.showNotification(`"${book.title}" is ready in your archive!`, 'success')
-        } else {
-          throw new Error('Import returned null')
-        }
-      } catch (err) {
-        console.error('Background import failed:', err)
-        ui.removeNotification(notificationId)
-        ui.showNotification(`Failed to summon "${metadata.title}". Checking parchment for errors...`, 'error')
-      } finally {
-        delete this.activeSummons[gutenbergId]
-      }
-    },
-
-    async importBookFromGutenberg(gutenbergId: number, metadata: Partial<Book>): Promise<Book | null> {
-      this.loading = true
-      try {
-        // 1. Double check if already imported (concurrency safety)
-        const existing = this.allBooks.find(b => b.gutenberg_id === gutenbergId)
-        if (existing) return existing
-
-        // 2. Fetch EPUB from Gutenberg
-        const epubUrl = `https://www.gutenberg.org/ebooks/${gutenbergId}.epub.images`
-        const response = await fetch(epubUrl)
-        if (!response.ok) throw new Error(`Gutenberg fetch failed: ${response.status}`)
-        
-        const blob = await response.blob()
-        const file = new File([blob], `${gutenbergId}.epub`, { type: 'application/epub+zip' })
-
-        // 3. Upload to Appwrite Storage
-        const fileId = ID.unique()
-        await storage.createFile(BUCKET_ID, fileId, file)
-
-        // 4. Create Book Document
-        const newBook = await databases.createDocument<Book>(DATABASE_ID, BOOKS_COLLECTION_ID, ID.unique(), {
-          title: metadata.title || 'Unknown Title',
-          author: metadata.author || 'Unknown Author',
-          subjects: metadata.subjects || [],
-          cover_url: metadata.cover_url || `https://www.gutenberg.org/cache/epub/${gutenbergId}/pg${gutenbergId}.cover.medium.jpg`,
-          file_id: fileId,
-          gutenberg_id: gutenbergId
-        })
-
-        // 5. Update local state
-        this.allBooks.push(newBook)
-        return newBook
-      } catch (err) {
-        console.error('Failed to import book:', err)
-        return null
-      } finally {
-        this.loading = false
-      }
-    }
   },
 })

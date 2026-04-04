@@ -1,33 +1,15 @@
-import { ref, watch, reactive } from 'vue'
+import { ref, watch, reactive, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { databases, DATABASE_ID, BOOKS_COLLECTION_ID } from '@/lib/appwrite'
 import { Query } from 'appwrite'
 import type { Book } from '../stores/library'
 
-export interface HybridBook {
-  id: number
-  $id: string
-  title: string
-  author: string
-  cover_url: string
-  subjects: string[]
-  isLocal: boolean
-  appwriteDocumentId: string | null
-  appwriteFileId: string | null
-}
-
-interface CacheEntry {
-  books: HybridBook[]
-  totalCount: number
-  timestamp: number
-}
-
 // ─── SHARED STATE ──────────────────────────────────────────────────
-export const books = ref<HybridBook[]>([])
+export const books = ref<Book[]>([])
 export const isLoading = ref(false)
 export const totalCount = ref(0)
-export const totalPages = ref(0)
-export const currentPage = ref(1)
+export const limit = ref(32)
+export const offset = ref(0)
 
 export const filters = reactive({
   search: '',
@@ -35,177 +17,93 @@ export const filters = reactive({
   topic: ''
 })
 
-const memoizedCache = new Map<string, CacheEntry>()
-const MAX_CACHE_SIZE = 50
-const DISK_CACHE_KEY = 'prolibris_local_catalog_p1'
-const CACHE_TTL = 1000 * 60 * 30 // 30 minutes
-let fetchGeneration = 0 // Race-condition guard: ignore stale responses
+const memoizedCache = new Map<string, { books: Book[], total: number, timestamp: number }>()
+const CACHE_TTL = 1000 * 60 * 5 // 5 minutes for Appwrite results
 
-/** Evict oldest entries when cache exceeds MAX_CACHE_SIZE (FIFO) */
-function cacheSet(key: string, entry: CacheEntry) {
-  if (memoizedCache.size >= MAX_CACHE_SIZE) {
-    const oldestKey = memoizedCache.keys().next().value
-    if (oldestKey !== undefined) memoizedCache.delete(oldestKey)
-  }
-  memoizedCache.set(key, entry)
+let fetchGeneration = 0 
+
+// ─── CORE LOGIC ──────────────────────────────────────────────────
+
+const getCacheKey = () => {
+  return `catalog-o-${offset.value}-s-${filters.search}-t-${filters.topic}-sort-${filters.sort}`
 }
 
-// ─── CORE LOGIC (SINGLETON METHODS) ──────────────────────────────
-
-const getCacheKey = (page: number, f = filters) => {
-  return `local-page-${page}-s-${f.search}-t-${f.topic}-sort-${f.sort}`
-}
-
-const buildQueries = (page: number, f = filters) => {
+const buildQueries = () => {
   const queries = [
-    Query.limit(32),
-    Query.offset((page - 1) * 32)
+    Query.limit(limit.value),
+    Query.offset(offset.value)
   ]
-  if (f.search) queries.push(Query.contains('title', f.search))
-  if (f.topic) queries.push(Query.contains('subjects', f.topic))
   
-  if (f.sort === 'popular') queries.push(Query.orderDesc('gutenberg_id'))
-  else if (f.sort === 'ascending') queries.push(Query.orderAsc('$createdAt'))
-  else if (f.sort === 'descending') queries.push(Query.orderDesc('$createdAt'))
+  if (filters.search) {
+    // Search by title (Appwrite requires index on 'title')
+    queries.push(Query.search('title', filters.search))
+  }
+  
+  if (filters.topic) {
+    queries.push(Query.contains('subjects', filters.topic))
+  }
+  
+  if (filters.sort === 'popularity') queries.push(Query.orderDesc('gutenberg_id'))
+  else if (filters.sort === 'ascending') queries.push(Query.orderAsc('$createdAt'))
+  else if (filters.sort === 'descending') queries.push(Query.orderDesc('$createdAt'))
   else queries.push(Query.orderAsc('title'))
 
   return queries
 }
 
-const mapBook = (doc: Book): HybridBook => ({
-  id: doc.gutenberg_id,
-  $id: doc.$id,
-  title: doc.title,
-  author: doc.author,
-  cover_url: doc.cover_url,
-  subjects: doc.subjects,
-  isLocal: true,
-  appwriteDocumentId: doc.$id,
-  appwriteFileId: doc.file_id
-})
-
-// ─── OPTIMIZED FETCHING (LOCAL-ONLY) ──────────────────────────
-
 export const fetchBooks = async (forceRefresh = false) => {
   const generation = ++fetchGeneration
-  const currentPageVal = currentPage.value
-  const currentFilters = { ...filters }
-  const currentKey = getCacheKey(currentPageVal, currentFilters)
+  const currentKey = getCacheKey()
   
-  // 1. Memory Cache Check (Instant Resolution)
+  // 1. Cache Check
   const cached = memoizedCache.get(currentKey)
   if (cached && !forceRefresh && (Date.now() - cached.timestamp < CACHE_TTL)) {
     books.value = cached.books
-    totalCount.value = cached.totalCount
-    totalPages.value = Math.ceil(cached.totalCount / 32)
-    triggerPrefetch(currentPageVal)
+    totalCount.value = cached.total
     return
   }
 
-  // 2. Disk Cache (Default Page 1 Only)
-  const isDefaultP1 = currentPageVal === 1 && !currentFilters.search && !currentFilters.topic
-  if (isDefaultP1 && !forceRefresh && books.value.length === 0 && typeof localStorage !== 'undefined') {
-    const diskData = localStorage.getItem(DISK_CACHE_KEY)
-    if (diskData) {
-      try {
-        const parsed = JSON.parse(diskData)
-        if (Date.now() - parsed.timestamp < CACHE_TTL) {
-          books.value = parsed.books
-          totalCount.value = parsed.totalCount
-          totalPages.value = Math.ceil(parsed.totalCount / 32)
-        }
-      } catch { /* ignore */ }
-    }
-  }
-
-  // 3. Database Fetch (Local-First, High-Priority)
-  isLoading.value = books.value.length === 0
+  isLoading.value = true
   try {
-    const queries = buildQueries(currentPageVal, currentFilters)
+    const queries = buildQueries()
+    const response = await databases.listDocuments<Book>(DATABASE_ID, BOOKS_COLLECTION_ID, queries)
     
-    // Start Appwrite fetch
-    const appwriteRes = await databases.listDocuments<Book>(DATABASE_ID, BOOKS_COLLECTION_ID, queries)
-    const localBooks = appwriteRes.documents.map(mapBook)
-    
-    // Stale response guard: if a newer fetch was triggered, discard this result
+    // Stale response guard
     if (generation !== fetchGeneration) return
 
-    // Update UI instantly with Local results
-    books.value = localBooks
-    totalCount.value = appwriteRes.total
-    totalPages.value = Math.ceil(appwriteRes.total / 32)
+    books.value = response.documents
+    totalCount.value = response.total
     
-    // Stop primary loading spinner if we have local data
-    if (localBooks.length > 0) isLoading.value = false
-
-    // Trigger pre-fetch for neighboring pages (Local data first)
-    triggerPrefetch(currentPageVal)
-
-    // 4. Cache final result
-    const entry = { books: localBooks, totalCount: totalCount.value, timestamp: Date.now() }
-    cacheSet(currentKey, entry)
-    if (isDefaultP1 && typeof localStorage !== 'undefined') {
-      localStorage.setItem(DISK_CACHE_KEY, JSON.stringify(entry))
-    }
-
+    // Cache the result
+    memoizedCache.set(currentKey, { 
+      books: response.documents, 
+      total: response.total, 
+      timestamp: Date.now() 
+    })
   } catch (error) {
-    console.error('Failed to fetch local catalog:', error)
+    console.error('Failed to fetch Appwrite catalog:', error)
   } finally {
-    isLoading.value = false
+    if (generation === fetchGeneration) {
+      isLoading.value = false
+    }
   }
 }
 
-const triggerPrefetch = (page: number) => {
-  if (page < totalPages.value) prefetchPage(page + 1)
-  if (page > 1) prefetchPage(page - 1)
-}
-
-const prefetchPage = async (page: number) => {
-  const currentFilters = { ...filters }
-  const key = getCacheKey(page, currentFilters)
-  if (memoizedCache.has(key)) return
-  
-  try {
-    const queries = buildQueries(page, currentFilters)
-    
-    // 1. Fetch Local Data First (High-Priority)
-    const appwriteRes = await databases.listDocuments<Book>(DATABASE_ID, BOOKS_COLLECTION_ID, queries).catch(() => ({ documents: [], total: 0 }))
-    const localBooks = appwriteRes.documents.map(mapBook)
-    
-    // Create initial cache entry with only local data
-    const initialEntry = { 
-        books: localBooks, 
-        totalCount: appwriteRes.total, 
-        timestamp: Date.now() 
-    }
-    cacheSet(key, initialEntry)
-  } catch { /* ignore prefetch errors */ }
-}
+export const totalPages = computed(() => Math.ceil(totalCount.value / limit.value))
+export const currentPage = computed(() => Math.floor(offset.value / limit.value) + 1)
 
 export const changePage = (page: number) => {
-  if (page >= 1 && (totalPages.value === 0 || page <= totalPages.value)) {
-    currentPage.value = page
-    fetchBooks()
-    
-    // Smooth scroll back to top of the catalog for better UX
-    if (typeof window !== 'undefined') {
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-    }
-  }
+  offset.value = (page - 1) * limit.value
+  fetchBooks()
+  if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
 export const updateFilters = (newFilters: Partial<typeof filters>) => {
   Object.assign(filters, newFilters)
-  currentPage.value = 1 
+  offset.value = 0 // Reset pagination on filter change
   fetchBooks()
-  
-  // Smooth scroll back to top of the catalog for better UX
-  if (typeof window !== 'undefined') {
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
+  if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
 }
-
-// ─── COMPOSABLE WRAPPER (SAFE FOR SETUP) ─────────────────────────
 
 export function useBookCatalog() {
   let route: ReturnType<typeof useRoute> | undefined
@@ -216,14 +114,16 @@ export function useBookCatalog() {
   } catch { /* Not in setup */ }
 
   if (router && route) {
+    // Initial state from URL
     if (!books.value.length && !isLoading.value) {
-      if (route.query.page) currentPage.value = Number(route.query.page)
       if (route.query.search) filters.search = route.query.search as string
       if (route.query.sort) filters.sort = route.query.sort as string
       if (route.query.topic) filters.topic = route.query.topic as string
+      if (route.query.page) offset.value = (Number(route.query.page) - 1) * limit.value
     }
 
-    watch([() => filters.search, () => filters.sort, () => filters.topic, currentPage], () => {
+    // Sync state to URL
+    watch([() => filters.search, () => filters.sort, () => filters.topic, offset], () => {
       router.replace({
         query: {
           ...route.query,
