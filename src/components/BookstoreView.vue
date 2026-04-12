@@ -16,16 +16,9 @@ const genres      = computed(() => library.allGenres.slice(0, 20))
 
 const filteredBooks = computed(() => {
   let list = [...library.enchantedBooks]
-  if (activeGenre.value) {
-    list = list.filter(b => b.subjects.includes(activeGenre.value))
-  }
   
   if (activeSort.value === 'title') {
     list.sort((a, b) => a.title.localeCompare(b.title))
-  } else if (activeSort.value === 'author') {
-    list.sort((a, b) => a.author.localeCompare(b.author))
-  } else if (activeSort.value === 'genre') {
-    list.sort((a, b) => (a.subjects[0] || '').localeCompare(b.subjects[0] || ''))
   }
   
   return list
@@ -210,7 +203,7 @@ function scrollShelf(dir: 'left' | 'right') {
             
             <div class="mt-4 text-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 transform translate-y-2 group-hover:translate-y-0">
               <h4 class="text-[#E8D5A0] font-bold text-xs line-clamp-1 max-w-[160px]">{{ book.title }}</h4>
-              <p class="text-white/40 text-[9px] font-medium mt-1">{{ book.author }}</p>
+              <p class="text-white/40 text-[9px] font-medium mt-1">Archival Tome</p>
             </div>
           </div>
         </div>
@@ -247,9 +240,9 @@ function scrollShelf(dir: 'left' | 'right') {
                 </button>
               </div>
               <h2 class="modal-title">{{ selected.book.title }}</h2>
-              <p class="modal-author">by {{ selected.book.author }}</p>
-              <div v-if="selected.book.subjects?.length" class="modal-subjects">
-                <span v-for="subj in selected.book.subjects.slice(0, 2)" :key="subj" class="subject-tag">{{ subj }}</span>
+              <p class="modal-author">Archival Tome</p>
+              <div class="modal-subjects">
+                <span class="subject-tag">ProLibris Archive</span>
               </div>
             </div>
           </div>

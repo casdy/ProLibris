@@ -1,7 +1,8 @@
 import { ref, watch, reactive, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { databases, DATABASE_ID, BOOKS_COLLECTION_ID } from '@/lib/appwrite'
+import { databases, DATABASE_ID, BOOKS_COLLECTION_ID, ASSETS_BUCKET_ID, storage } from '@/lib/appwrite'
 import { Query } from 'appwrite'
+import { mapTitleToGenre } from '@/lib/genreMapper'
 import type { Book } from '../stores/library'
 
 // ─── SHARED STATE ──────────────────────────────────────────────────
@@ -13,7 +14,7 @@ export const offset = ref(0)
 
 export const filters = reactive({
   search: '',
-  sort: 'popularity',
+  sort: 'newest', // Changed from popularity (gutenberg_id)
   topic: ''
 })
 
@@ -35,18 +36,23 @@ const buildQueries = () => {
   ]
   
   if (filters.search) {
-    // Search by title (Appwrite requires index on 'title')
-    queries.push(Query.search('title', filters.search))
+    queries.push(Query.contains('title', filters.search))
   }
   
   if (filters.topic) {
     queries.push(Query.contains('subjects', filters.topic))
   }
   
-  if (filters.sort === 'popularity') queries.push(Query.orderDesc('gutenberg_id'))
-  else if (filters.sort === 'ascending') queries.push(Query.orderAsc('$createdAt'))
-  else if (filters.sort === 'descending') queries.push(Query.orderDesc('$createdAt'))
-  else queries.push(Query.orderAsc('title'))
+  if (filters.sort === 'newest' || filters.sort === 'descending') {
+    queries.push(Query.orderDesc('$createdAt'))
+  } else if (filters.sort === 'ascending') {
+    queries.push(Query.orderAsc('$createdAt'))
+  } else if (filters.sort === 'popular') {
+    // In search mode or filtered mode, we use relevance or alphabetical fallback
+    queries.push(Query.orderAsc('title'))
+  } else {
+    queries.push(Query.orderAsc('title'))
+  }
 
   return queries
 }
@@ -55,7 +61,6 @@ export const fetchBooks = async (forceRefresh = false) => {
   const generation = ++fetchGeneration
   const currentKey = getCacheKey()
   
-  // 1. Cache Check
   const cached = memoizedCache.get(currentKey)
   if (cached && !forceRefresh && (Date.now() - cached.timestamp < CACHE_TTL)) {
     books.value = cached.books
@@ -68,15 +73,26 @@ export const fetchBooks = async (forceRefresh = false) => {
     const queries = buildQueries()
     const response = await databases.listDocuments<Book>(DATABASE_ID, BOOKS_COLLECTION_ID, queries)
     
-    // Stale response guard
     if (generation !== fetchGeneration) return
 
-    books.value = response.documents
+    // Enrich with cover_url (required for BookCard) and fallback subjects
+    const enriched = response.documents.map(doc => {
+      const subjects = (doc.subjects && doc.subjects.length > 0) 
+        ? doc.subjects 
+        : mapTitleToGenre(doc.title)
+        
+      return {
+        ...doc,
+        subjects,
+        cover_url: storage.getFileView(ASSETS_BUCKET_ID, doc.coverImageId).toString()
+      }
+    })
+
+    books.value = enriched
     totalCount.value = response.total
     
-    // Cache the result
     memoizedCache.set(currentKey, { 
-      books: response.documents, 
+      books: enriched, 
       total: response.total, 
       timestamp: Date.now() 
     })
@@ -100,7 +116,7 @@ export const changePage = (page: number) => {
 
 export const updateFilters = (newFilters: Partial<typeof filters>) => {
   Object.assign(filters, newFilters)
-  offset.value = 0 // Reset pagination on filter change
+  offset.value = 0 
   fetchBooks()
   if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
 }
@@ -114,7 +130,6 @@ export function useBookCatalog() {
   } catch { /* Not in setup */ }
 
   if (router && route) {
-    // Initial state from URL
     if (!books.value.length && !isLoading.value) {
       if (route.query.search) filters.search = route.query.search as string
       if (route.query.sort) filters.sort = route.query.sort as string
@@ -122,13 +137,12 @@ export function useBookCatalog() {
       if (route.query.page) offset.value = (Number(route.query.page) - 1) * limit.value
     }
 
-    // Sync state to URL
     watch([() => filters.search, () => filters.sort, () => filters.topic, offset], () => {
       router.replace({
         query: {
           ...route.query,
           search: filters.search || undefined,
-          sort: filters.sort !== 'popularity' ? filters.sort : undefined,
+          sort: filters.sort !== 'newest' ? filters.sort : undefined,
           topic: filters.topic || undefined,
           page: currentPage.value !== 1 ? currentPage.value.toString() : undefined
         }

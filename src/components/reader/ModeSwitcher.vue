@@ -38,7 +38,7 @@ async function selectMode(mode: ReadingMode) {
       :key="mode.key"
       @click="selectMode(mode.key)"
       :disabled="switching"
-      class="relative z-10 flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-sm font-bold transition-colors duration-300"
+      class="relative z-10 flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-sm font-bold transition-all duration-200"
       :class="[
         reader.activeMode === mode.key
           ? 'text-white'
@@ -50,3 +50,9 @@ async function selectMode(mode: ReadingMode) {
     </button>
   </div>
 </template>
+
+<style scoped>
+.mode-switcher-pill {
+  transition: all 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+</style>

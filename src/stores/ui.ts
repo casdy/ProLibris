@@ -56,15 +56,21 @@ export const useUIStore = defineStore('ui', {
         const auth = useAuthStore()
         const library = useLibraryStore()
 
-        // 1. First, Manifest the User (Sequential Requirement)
-        await auth.init()
+        // 1. Ensure User state is ready (Router handles init, we just refresh if needed)
+        // If the user isn't logged in, we skip library fetching
+        if (!auth.user) {
+          // Double check just in case router guard hasn't Finished yet
+          if (auth.loading) await auth.init()
+        }
 
-        // 2. Then, Summon the Archives (Parallel allowed once ID is present)
-        await Promise.all([
-          library.fetchBooks(),
-          library.fetchUserSessions(),
-          fetchCatalog()
-        ])
+        if (auth.user) {
+          // 2. Then, Summon the Archives (Parallel)
+          await Promise.all([
+            library.fetchBooks(),
+            library.fetchUserSessions(),
+            fetchCatalog()
+          ])
+        }
       } catch (error) {
         console.error('Platform initialization error:', error)
       } finally {

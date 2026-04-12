@@ -18,8 +18,7 @@ const isSortOpen = ref(false)
 
 const sortOptions = [
   { label: 'Title', value: 'title' },
-  { label: 'Author', value: 'author' },
-  { label: 'Genre', value: 'genre' },
+  { label: 'Newest First', value: 'newest' },
 ]
 
 const currentSortLabel = computed(() => 
@@ -66,47 +65,8 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
 <template>
   <div ref="controlsRef" class="flex flex-wrap items-center gap-3 w-full">
     
-    <!-- Genre Dropdown -->
-    <div class="relative min-w-[160px] flex-1 sm:flex-initial">
-      <button 
-        @click="toggleGenre"
-        class="w-full flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-black/40 backdrop-blur-md border border-white/10 hover:border-[#f02e65]/40 transition-all text-sm font-bold theme-text shadow-lg group"
-      >
-        <div class="flex items-center gap-2">
-          <Tag class="w-4 h-4 text-[#f02e65] group-hover:scale-110 transition-transform" />
-          <span class="truncate">{{ currentGenreLabel }}</span>
-        </div>
-        <ChevronDown class="w-4 h-4 opacity-40 transition-transform" :class="{ 'rotate-180': isGenreOpen }" />
-      </button>
-
-      <Transition name="fade-slide-up">
-        <div v-if="isGenreOpen" class="absolute left-0 top-full mt-2 w-64 z-50 rounded-2xl bg-[#1a0f05]/95 border border-[#f02e65]/20 shadow-2xl overflow-hidden backdrop-blur-2xl p-1.5">
-          <div class="max-h-64 overflow-y-auto custom-scrollbar pr-1">
-            <button
-              @click="selectGenre('')"
-              class="w-full flex items-center justify-between px-4 py-2.5 rounded-xl text-sm font-bold transition-colors mb-1"
-              :class="activeGenre === '' ? 'bg-[#f02e65] text-white' : 'text-white/60 hover:bg-white/5 hover:text-white'"
-            >
-              All Genres
-              <Check v-if="activeGenre === ''" class="w-4 h-4" />
-            </button>
-            <button
-              v-for="genre in genres"
-              :key="genre"
-              @click="selectGenre(genre)"
-              class="w-full flex items-center justify-between px-4 py-2.5 rounded-xl text-sm font-bold transition-colors mb-1 text-left"
-              :class="activeGenre === genre ? 'bg-[#f02e65] text-white' : 'text-white/60 hover:bg-white/5 hover:text-white'"
-            >
-              <span class="truncate">{{ genre }}</span>
-              <Check v-if="activeGenre === genre" class="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      </Transition>
-    </div>
-
     <!-- Sort Dropdown -->
-    <div class="relative min-w-[140px] flex-1 sm:flex-initial">
+    <div class="relative min-w-[140px] flex-1 sm:flex-initial mx-auto">
       <button 
         @click="toggleSort"
         class="w-full flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-black/40 backdrop-blur-md border border-white/10 hover:border-[#f02e65]/40 transition-all text-sm font-bold theme-text shadow-lg group"

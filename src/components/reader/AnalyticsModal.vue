@@ -88,7 +88,7 @@ const elapsedFormatted = computed(() => {
   return `${minutes}:${String(secs).padStart(2, '0')}`
 })
 
-const hasNextChapter = computed(() => reader.currentSpineIndex < reader.totalChapters - 1)
+const hasNextChapter = computed(() => reader.currentChapterIndex < reader.totalChapters - 1)
 
 const problemKeysDisplay = computed(() => reader.problemKeys)
 

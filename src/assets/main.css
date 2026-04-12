@@ -8,27 +8,27 @@
   --font-cinzel: "Cinzel", serif;
 }
 
-/* ─── LIGHT THEME: Warm Parchment & Mahogany ─────────────────── */
+/* ─── LIGHT THEME: True Parchment & Scholarly Ink ─────────────── */
 :root {
-  --bg-app:    #1a0f05;
-  --bg-nav:    rgba(22, 12, 4, 0.80);
-  --text-main: #E8D5A0;
-  --text-soft: #C8A87A;
-  --border-app: rgba(212, 175, 55, 0.18);
-  --bg-card:   rgba(255, 255, 255, 0.035);
+  --bg-app:    #FEF9F3; /* Warm Parchment White */
+  --bg-nav:    rgba(254, 249, 243, 0.92);
+  --text-main: #2A1810; /* Deep Mahogany Ink */
+  --text-soft: #634B3D;
+  --border-app: rgba(174, 0, 1, 0.15);
+  --bg-card:   rgba(255, 255, 255, 0.70);
 
-  /* Reading mode tokens */
-  --color-correct:          #6ee7a0;
-  --color-correct-bg:       rgba(110, 231, 160, 0.10);
-  --color-error:            #f87171;
-  --color-error-bg:         rgba(248, 113, 113, 0.15);
-  --color-pending:          #9A7D5A;
+  /* Reading mode tokens (Light) */
+  --color-correct:          #059669;
+  --color-correct-bg:       rgba(5, 150, 105, 0.10);
+  --color-error:            #DC2626;
+  --color-error-bg:         rgba(220, 38, 38, 0.15);
+  --color-pending:          #8B6E58;
   --color-caret:            #AE0001;
   --color-paced-active:     #AE0001;
-  --color-paced-active-bg:  rgba(174, 0, 1, 0.18);
-  --color-paced-dim:        rgba(232, 213, 160, 0.28);
-  --color-hud-bg:           rgba(28, 16, 6, 0.88);
-  --color-hud-border:       rgba(212, 175, 55, 0.20);
+  --color-paced-active-bg:  rgba(174, 0, 1, 0.15);
+  --color-paced-dim:        rgba(42, 24, 16, 0.30);
+  --color-hud-bg:           rgba(254, 249, 243, 0.95);
+  --color-hud-border:       rgba(174, 0, 1, 0.10);
 }
 
 /* ─── DARK THEME: Deep Midnight Mahogany ─────────────────────── */
@@ -57,7 +57,7 @@
 
 @layer base {
   html {
-    @apply transition-colors duration-75;
+    @apply transition-colors duration-200;
     overscroll-behavior-y: contain;
     height: 100%;
     zoom: 0.88;
@@ -66,7 +66,7 @@
   body {
     background-color: var(--bg-app);
     color: var(--text-main);
-    @apply transition-colors duration-75 min-h-screen;
+    @apply transition-colors duration-200 min-h-screen;
     font-family: var(--font-outfit);
     overscroll-behavior-y: contain;
     touch-action: pan-y;
@@ -85,54 +85,33 @@
 .theme-text { color: var(--text-main); }
 .theme-text-soft { color: var(--text-soft); }
 .theme-border { border-color: var(--border-app); }
-.theme-card { background-color: var(--bg-card); }
+.theme-card { 
+  background-color: var(--bg-card); 
+  @apply backdrop-blur-xl border;
+  border-color: var(--border-app);
+}
 
 /* ─── GLOBAL SURFACE OVERRIDES ────────────────────────────── */
-/* Remap hardcoded Tailwind whites/grays → warm mahogany tones    */
+/* Ensures consistency when using standard Tailwind utility classes */
 
-/* LIGHT MODE OVERRIDES (.dark not present) */
-:not(.dark) .bg-white,
-:not(.dark) .bg-white\/60,
-:not(.dark) .bg-white\/90,
-:not(.dark) .bg-white\/10,
-:not(.dark) .bg-white\/5 {
-  background-color: rgba(40, 22, 8, 0.40) !important;
+/* LIGHT MODE OVERRIDES */
+:not(.dark) .bg-white {
+  background-color: var(--bg-app) !important;
 }
 
 :not(.dark) .bg-black\/5,
 :not(.dark) .bg-black\/10 {
-  background-color: rgba(0, 0, 0, 0.15) !important;
+  background-color: rgba(174, 0, 1, 0.04) !important;
 }
 
-:not(.dark) .bg-\[\#FDFCFB\],
-:not(.dark) .bg-\[\#F5F5F7\],
-:not(.dark) .bg-\[\#EBEBEF\] {
-  background-color: rgba(32, 18, 6, 0.70) !important;
-}
+:not(.dark) .text-\[\#19191C\] { color: var(--text-main) !important; }
+:not(.dark) .text-\[\#86868B\] { color: var(--text-soft) !important; }
 
-:not(.dark) .border-\[\#EBEBEF\],
-:not(.dark) .border-\[\#F5F5F7\] {
-  border-color: rgba(212, 175, 55, 0.15) !important;
-}
-
-:not(.dark) .text-\[\#19191C\] { color: #E8D5A0 !important; }
-:not(.dark) .text-\[\#86868B\] { color: #C8A87A !important; }
-:not(.dark) .text-\[\#56565C\] { color: #A08060 !important; }
-
-/* DARK MODE OVERRIDES (.dark present) */
+/* DARK MODE OVERRIDES */
 .dark .bg-\[\#19191C\],
 .dark .bg-\[\#121214\],
 .dark .bg-\[\#FDFCFB\] {
   background-color: var(--bg-app) !important;
-}
-
-.dark .bg-white\/5 {
-  background-color: rgba(255, 255, 255, 0.02) !important;
-}
-
-.dark .border-white\/5,
-.dark .border-\[\#EBEBEF\] {
-  border-color: rgba(212, 175, 55, 0.10) !important;
 }
 
 /* Global input styling */
@@ -140,9 +119,10 @@ input[type="text"],
 input[type="number"],
 input[type="email"],
 input[type="password"] {
-  background-color: rgba(30, 16, 4, 0.40) !important;
+  background-color: var(--bg-card) !important;
   color: var(--text-main) !important;
   border: 1px solid var(--border-app) !important;
+  @apply transition-all duration-200 outline-none focus:ring-2 focus:ring-[#AE0001]/20;
 }
 input::placeholder {
   color: var(--text-soft) !important;

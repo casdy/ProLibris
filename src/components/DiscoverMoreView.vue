@@ -14,16 +14,11 @@ const activeSort  = ref('title')
 
 const filteredBooks = computed(() => {
   let list = [...library.discoverBooks]
-  if (activeGenre.value) {
-    list = list.filter(b => b.subjects.includes(activeGenre.value))
-  }
+  
+  // Note: Genre/Subject filtering is currently disabled in headless mode
   
   if (activeSort.value === 'title') {
     list.sort((a, b) => a.title.localeCompare(b.title))
-  } else if (activeSort.value === 'author') {
-    list.sort((a, b) => a.author.localeCompare(b.author))
-  } else if (activeSort.value === 'genre') {
-    list.sort((a, b) => (a.subjects[0] || '').localeCompare(b.subjects[0] || ''))
   }
   
   return list

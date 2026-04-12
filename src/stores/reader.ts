@@ -1,30 +1,12 @@
 import { defineStore } from 'pinia'
-import { markRaw } from 'vue'
+import { ref, computed, shallowRef, markRaw } from 'vue'
 import { useLibraryStore } from './library'
 import { useAuthStore } from './auth'
-import {
-  extractChapterText,
-  tokenizeWords,
-  tokenizeChars,
-  tokenizeSentences,
-  type ExtractedChapter,
-  type WordToken,
-  type CharToken,
-  type CharStatus,
-  type SentenceToken,
-} from '@/lib/textExtractor'
+import { tokenizeWords, tokenizeChars, tokenizeSentences } from '@/lib/textExtractor'
+import type { WordToken, CharToken, CharStatus, SentenceToken } from '@/lib/textExtractor'
+import { marked } from 'marked'
 
 export type ReadingMode = 'standard' | 'typing' | 'paced'
-
-/** Minimal structural type for epub.js Book — only the API surface used by the store */
-interface EpubBook {
-  spine: {
-    length: number
-    get: (index: number) => { load: (loader: unknown) => Promise<unknown> } | undefined
-    each: (cb: (section: { label: string; href: string }, index: number) => void) => void
-  }
-  load: (path: string) => Promise<unknown>
-}
 
 export interface SessionStats {
   totalKeystrokes: number
@@ -37,10 +19,10 @@ export interface SessionStats {
   peakWpm: number
 }
 
-export interface SpineItem {
+export interface Chapter {
+  title: string
+  content: string
   index: number
-  label: string
-  href: string
 }
 
 function createEmptyStats(): SessionStats {
@@ -56,509 +38,6 @@ function createEmptyStats(): SessionStats {
   }
 }
 
-export const useReaderStore = defineStore('reader', {
-  state: () => ({
-    // Mode
-    activeMode: 'standard' as ReadingMode,
-
-    // Book reference (markRaw prevents Vue from proxying the epub.js internal tree)
-    bookInstance: null as EpubBook | null,
-    bookId: '',
-
-    // Chapter data
-    currentSpineIndex: 0,
-    spineItems: [] as SpineItem[],
-    chapterData: null as ExtractedChapter | null,
-
-    // Typing mode state
-    charTokens: [] as CharToken[],
-    currentCharIndex: 0,
-    isTypingError: false,
-
-    // Paced mode state
-    wordTokens: [] as WordToken[],
-    sentences: [] as SentenceToken[],
-    currentWordIndex: 0,
-    currentSentenceIndex: 0,
-    targetWpm: 250,
-    isPlaying: false,
-    pacedTimerId: null as ReturnType<typeof setInterval> | null,
-    isSpeedReadOverlayOpen: false,
-    lastVisibleText: '',
-
-    // Analytics
-    sessionStats: createEmptyStats(),
-    wpmHistory: [] as { time: number; wpm: number }[],
-    wpmSampleTimerId: null as ReturnType<typeof setInterval> | null,
-    errorMap: {} as Record<string, { total: number; errors: number }>,
-
-    // UI state
-    chapterProgress: 0,
-    estimatedTimeRemaining: '',
-    showAnalyticsModal: false,
-    isExtracting: false,
-  }),
-
-  getters: {
-    totalChapters(state): number {
-      return state.spineItems.length
-    },
-    chapterTitle(state): string {
-      return state.chapterData?.title || `Chapter ${state.currentSpineIndex + 1}`
-    },
-    problemKeys(state): string[] {
-      const threshold = 0.15 // 15% error rate
-      return Object.entries(state.errorMap)
-        .filter(([, stats]) => stats.total >= 5 && stats.errors / stats.total > threshold)
-        .sort((a, b) => (b[1].errors / b[1].total) - (a[1].errors / a[1].total))
-        .map(([key]) => key)
-        .slice(0, 10)
-    },
-  },
-
-  actions: {
-    // ─── INITIALIZATION ─────────────────────────────────────────
-    async initBook(book: unknown, bookId: string) {
-      this.bookInstance = markRaw(book as EpubBook)
-      this.bookId = bookId
-      
-      // Build spine item list
-      const items: SpineItem[] = []
-      ;(book as EpubBook).spine.each((section: { label: string; href: string }, index: number) => {
-        items.push({
-          index,
-          label: section.label || `Section ${index + 1}`,
-          href: section.href || '',
-        })
-      })
-      this.spineItems = items
-    },
-
-    // ─── MODE SWITCHING ─────────────────────────────────────────
-    async setMode(mode: ReadingMode) {
-      // Cleanup current mode
-      this.stopPacedReading()
-      this.stopWpmSampling()
-
-      this.activeMode = mode
-      
-      if (mode !== 'standard' && this.bookInstance) {
-        await this.extractCurrentChapter()
-      }
-
-      if (mode === 'typing') {
-        this.resetTypingState()
-        this.startWpmSampling()
-      } else if (mode === 'paced') {
-        this.resetPacedState()
-      }
-    },
-
-    // ─── TEXT EXTRACTION ────────────────────────────────────────
-    async extractCurrentChapter() {
-      if (!this.bookInstance) return
-
-      this.isExtracting = true
-      try {
-        this.chapterData = await extractChapterText(this.bookInstance, this.currentSpineIndex)
-
-        if (this.chapterData) {
-          this.wordTokens = tokenizeWords(this.chapterData.paragraphs)
-          this.charTokens = tokenizeChars(this.chapterData.paragraphs)
-          this.sentences = tokenizeSentences(this.chapterData.paragraphs)
-          
-          // Synthesis will be handled by PuterStore in the component
-        }
-      } catch (e) {
-        console.error('Failed to extract chapter text:', e)
-      } finally {
-        this.isExtracting = false
-      }
-    },
-
-    // ─── CHAPTER NAVIGATION ─────────────────────────────────────
-    async goToChapter(index: number) {
-      if (index < 0 || index >= this.spineItems.length) return
-
-      // Save current session stats before moving
-      if (this.activeMode !== 'standard') {
-        await this.saveSessionToAppwrite()
-      }
-
-      this.currentSpineIndex = index
-      this.resetSessionStats()
-      this.showAnalyticsModal = false
-
-      if (this.activeMode !== 'standard') {
-        await this.extractCurrentChapter()
-        if (this.activeMode === 'typing') {
-          this.resetTypingState()
-          this.startWpmSampling()
-        } else if (this.activeMode === 'paced') {
-          this.resetPacedState()
-        }
-      }
-    },
-
-    async nextChapter() {
-      await this.goToChapter(this.currentSpineIndex + 1)
-    },
-
-    async prevChapter() {
-      await this.goToChapter(this.currentSpineIndex - 1)
-    },
-
-    // ─── TYPING ENGINE ──────────────────────────────────────────
-    resetTypingState() {
-      this.currentCharIndex = 0
-      this.isTypingError = false
-      this.charTokens = this.charTokens.map(t => ({ ...t, status: 'pending' as CharStatus }))
-      this.resetSessionStats()
-    },
-
-    handleKeystroke(event: KeyboardEvent) {
-      if (this.activeMode !== 'typing') return
-      if (this.currentCharIndex >= this.charTokens.length) return
-
-      // Ignore meta keys
-      const ignoredKeys = ['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'Tab', 'Escape',
-        'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End',
-        'PageUp', 'PageDown', 'Insert', 'Delete', 'F1', 'F2', 'F3', 'F4',
-        'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12']
-      
-      if (ignoredKeys.includes(event.key)) return
-      
-      // Allow default for F-keys and system shortcuts if not handled
-      event.preventDefault()
-      this.handleTypingInput(event.key)
-    },
-
-    handleTypingInput(key: string) {
-      if (this.activeMode !== 'typing') return
-      if (this.currentCharIndex >= this.charTokens.length) return
-
-      // Start timer on first keystroke
-      if (this.sessionStats.startTime === null) {
-        this.sessionStats.startTime = Date.now()
-      }
-
-      const currentToken = this.charTokens[this.currentCharIndex]
-
-      // Handle backspace — correct an error
-      if (key === 'Backspace') {
-        if (this.isTypingError) {
-          this.isTypingError = false
-          currentToken.status = 'pending'
-        }
-        return
-      }
-
-      // If currently in error state, don't advance
-      if (this.isTypingError) return
-
-      this.sessionStats.totalKeystrokes++
-
-      // Track key accuracy
-      const expectedChar = currentToken.isNewline ? 'Enter' : currentToken.char
-
-      if (!this.errorMap[expectedChar]) {
-        this.errorMap[expectedChar] = { total: 0, errors: 0 }
-      }
-      this.errorMap[expectedChar].total++
-
-      // Check correctness
-      let isCorrect = false
-      if (currentToken.isNewline) {
-        isCorrect = key === 'Enter' || key === ' '
-      } else {
-        isCorrect = key === currentToken.char
-      }
-
-      if (isCorrect) {
-        currentToken.status = 'correct'
-        this.sessionStats.correctKeystrokes++
-        this.currentCharIndex++
-        this.updateTypingProgress()
-
-        // Check if chapter complete
-        if (this.currentCharIndex >= this.charTokens.length) {
-          this.onChapterComplete()
-        }
-      } else {
-        currentToken.status = 'error'
-        this.isTypingError = true
-        this.sessionStats.errorKeystrokes++
-        this.errorMap[expectedChar].errors++
-      }
-
-      // Update accuracy
-      this.sessionStats.accuracy = this.sessionStats.totalKeystrokes > 0
-        ? Math.round((this.sessionStats.correctKeystrokes / this.sessionStats.totalKeystrokes) * 1000) / 10
-        : 100
-    },
-
-    updateTypingProgress() {
-      if (this.charTokens.length > 0) {
-        this.chapterProgress = Math.round((this.currentCharIndex / this.charTokens.length) * 100)
-      }
-
-      // Estimate time remaining based on current WPM
-      if (this.sessionStats.currentWpm > 0 && this.chapterData) {
-        const wordsTyped = this.charTokens
-          .slice(0, this.currentCharIndex)
-          .filter(t => t.char === ' ' || t.isNewline).length
-        const wordsRemaining = (this.chapterData.wordCount || 0) - wordsTyped
-        const minutesRemaining = wordsRemaining / this.sessionStats.currentWpm
-        this.estimatedTimeRemaining = formatTime(minutesRemaining)
-      }
-    },
-
-    // ─── PACED READING ENGINE ───────────────────────────────────
-    resetPacedState() {
-      this.stopPacedReading()
-      this.currentWordIndex = 0
-      this.chapterProgress = 0
-      this.resetSessionStats()
-    },
-
-    startPacedReading() {
-      if (this.isPlaying) return
-
-      // Guard: don't start if there's nothing to read
-      if (this.wordTokens.length === 0) {
-        console.warn('No word tokens to read — skipping playback.')
-        return
-      }
-
-      this.isPlaying = true
-
-      if (this.sessionStats.startTime === null) {
-        this.sessionStats.startTime = Date.now()
-      }
-
-      // Visual pacing logic is now handled in the component
-      // for more precise UI synchronization, but we'll maintain the store's
-      // isPlaying state for global control.
-    },
-
-    stopPacedReading() {
-      this.isPlaying = false
-      if (this.pacedTimerId) {
-        clearInterval(this.pacedTimerId)
-        this.pacedTimerId = null
-      }
-    },
-
-    togglePacedReading() {
-      if (this.isPlaying) {
-        this.stopPacedReading()
-      } else {
-        this.startPacedReading()
-      }
-    },
-
-    skipWord(delta: number) {
-      const newIndex = Math.max(0, Math.min(this.currentWordIndex + delta, this.wordTokens.length - 1))
-      this.currentWordIndex = newIndex
-      this.updatePacedProgress()
-    },
-
-    setTargetWpm(wpm: number) {
-      this.targetWpm = Math.max(50, Math.min(1000, wpm))
-    },
-
-    updatePacedProgress() {
-      if (this.wordTokens.length > 0) {
-        this.chapterProgress = Math.round((this.currentWordIndex / this.wordTokens.length) * 100)
-      }
-
-      // Time estimate
-      const wordsRemaining = this.wordTokens.length - this.currentWordIndex
-      const minutesRemaining = wordsRemaining / this.targetWpm
-      this.estimatedTimeRemaining = formatTime(minutesRemaining)
-
-      // Update WPM stat for paced = just target
-      this.sessionStats.currentWpm = this.targetWpm
-    },
-
-    // ─── WPM SAMPLING ───────────────────────────────────────────
-    startWpmSampling() {
-      this.stopWpmSampling()
-      this.wpmSampleTimerId = setInterval(() => {
-        this.sampleWpm()
-      }, 2000)
-    },
-
-    stopWpmSampling() {
-      if (this.wpmSampleTimerId) {
-        clearInterval(this.wpmSampleTimerId)
-        this.wpmSampleTimerId = null
-      }
-    },
-
-    sampleWpm() {
-      if (!this.sessionStats.startTime) return
-
-      const elapsed = Date.now() - this.sessionStats.startTime
-      this.sessionStats.elapsedMs = elapsed
-
-      if (elapsed < 1000) return
-
-      // Count words typed (based on spaces typed)
-      const spacesTyped = this.charTokens
-        .slice(0, this.currentCharIndex)
-        .filter(t => t.char === ' ' || t.isNewline).length
-      const wordsTyped = spacesTyped + (this.currentCharIndex > 0 ? 1 : 0)
-
-      const minutes = elapsed / 60000
-      const wpm = Math.round(wordsTyped / minutes)
-
-      this.sessionStats.currentWpm = wpm
-      if (wpm > this.sessionStats.peakWpm) {
-        this.sessionStats.peakWpm = wpm
-      }
-
-      // Record history point
-      this.wpmHistory.push({
-        time: Math.round(elapsed / 1000),
-        wpm,
-      })
-    },
-
-    // ─── SESSION MANAGEMENT ─────────────────────────────────────
-    resetSessionStats() {
-      this.sessionStats = createEmptyStats()
-      this.wpmHistory = []
-      this.errorMap = {}
-      this.chapterProgress = 0
-      this.estimatedTimeRemaining = ''
-    },
-
-    async onChapterComplete() {
-      // Guard: only show completion if a meaningful reading session occurred
-      const minReadingTime = 2000 // 2 seconds
-      const minWordsRead = 5
-      
-      const sessionDuration = Date.now() - (this.sessionStats.startTime || Date.now())
-      const wordsRead = this.activeMode === 'typing' ? this.currentCharIndex / 5 : this.currentWordIndex
-
-      if (sessionDuration < minReadingTime || wordsRead < minWordsRead) {
-        this.stopPacedReading()
-        this.stopWpmSampling()
-        return
-      }
-
-      this.stopPacedReading()
-      this.stopWpmSampling()
-
-      // Final WPM sample
-      this.sampleWpm()
-
-      this.chapterProgress = 100
-      this.showAnalyticsModal = true
-
-      // If this was the last chapter, mark book as completed
-      const isLastChapter = this.currentSpineIndex === this.spineItems.length - 1
-      await this.saveSessionToAppwrite(isLastChapter ? 'completed' : 'reading')
-    },
-
-    async saveSessionToAppwrite(statusOverride?: 'reading' | 'completed') {
-      try {
-        const library = useLibraryStore()
-        const auth = useAuthStore()
-        if (!auth.user || !this.bookId) return
-
-        const sessionData: Record<string, unknown> = {
-          mode_preference: this.activeMode,
-          target_read_wpm: this.targetWpm,
-        }
-        
-        if (statusOverride) {
-          sessionData.status = statusOverride
-        }
-
-        if (this.activeMode === 'typing') {
-          sessionData.avg_type_wpm = this.sessionStats.currentWpm
-          sessionData.avg_accuracy = this.sessionStats.accuracy
-          sessionData.problem_keys = this.problemKeys
-        }
-
-        await library.updateProgress(
-          this.bookId,
-          `spine-${this.currentSpineIndex}`,
-          0,
-          sessionData,
-        )
-      } catch (e) {
-        console.error('Failed to save session to Appwrite:', e)
-      }
-    },
-
-    toggleSpeedReadOverlay() {
-      this.isSpeedReadOverlayOpen = !this.isSpeedReadOverlayOpen
-      
-      if (this.isSpeedReadOverlayOpen) {
-        // Automatically start focus session with the last known visible text
-        if (this.lastVisibleText && this.lastVisibleText.trim().length > 0) {
-          this.startFocusSession(this.lastVisibleText)
-        }
-        this.isPlaying = true
-      } else {
-        this.stopPacedReading()
-      }
-    },
-
-    startFocusSession(text: string) {
-      if (!text) return
-      // Split text into paragraphs to match tokenizer requirements
-      const paragraphs = text.split(/\n+/).filter(p => p.trim().length > 0)
-      
-      this.wordTokens = tokenizeWords(paragraphs)
-      this.sentences = tokenizeSentences(paragraphs)
-      this.currentWordIndex = 0
-      this.currentSentenceIndex = 0
-    },
-
-    setLastVisibleText(text: string) {
-      if (!text) return
-      this.lastVisibleText = text
-      
-      // If Focus Mode is already open, instantly refresh the session with the new page text
-      if (this.isSpeedReadOverlayOpen) {
-        this.startFocusSession(text)
-      }
-    },
-
-    // ─── Seamless Handoff Logic ──────────────────────────────
-    syncSpeedReadToCfi(cfi: string) {
-      if (!this.wordTokens.length) return
-      console.log(`Syncing Speed Read to CFI: ${cfi}`)
-      
-      // Simple implementation: Reset to start of current chapter tokens
-      this.currentWordIndex = 0
-      this.currentSentenceIndex = 0
-    },
-
-    // ─── Puter.js Helpers Removed ────────────────────────────
-
-
-    // ─── CLEANUP ────────────────────────────────────────────────
-    cleanup() {
-      this.stopPacedReading()
-      this.stopWpmSampling()
-      
-      this.bookInstance = null
-      this.chapterData = null
-      this.charTokens = []
-      this.wordTokens = []
-      this.spineItems = []
-      this.resetSessionStats()
-    },
-
-  },
-})
-
-// ─── HELPERS ──────────────────────────────────────────────────────
 function formatTime(minutes: number): string {
   if (!isFinite(minutes) || minutes <= 0) return '< 1 min'
   if (minutes < 1) return '< 1 min'
@@ -567,3 +46,512 @@ function formatTime(minutes: number): string {
   const mins = Math.round(minutes % 60)
   return `~${hrs}h ${mins}m`
 }
+
+export const useReaderStore = defineStore('reader', () => {
+  // ─── STATE ──────────────────────────────────────────────────
+  const activeMode = ref<ReadingMode>('standard')
+  const bookId = ref('')
+  const markdownRaw = ref('')
+  const chapters = shallowRef<Chapter[]>([])
+  const currentChapterIndex = ref(0)
+
+  const charTokens = shallowRef<CharToken[]>([])
+  const currentCharIndex = ref(0)
+  const isTypingError = ref(false)
+
+  const wordTokens = shallowRef<WordToken[]>([])
+  const sentences = shallowRef<SentenceToken[]>([])
+  const currentWordIndex = ref(0)
+  const currentSentenceIndex = ref(0)
+  const targetWpm = ref(250)
+  const isPlaying = ref(false)
+  const pacedTimerId = ref<ReturnType<typeof setInterval> | null>(null)
+  const isSpeedReadOverlayOpen = ref(false)
+  const lastVisibleText = ref('')
+
+  const sessionStats = ref<SessionStats>(createEmptyStats())
+  const wpmHistory = ref<{ time: number; wpm: number }[]>([])
+  const wpmSampleTimerId = ref<ReturnType<typeof setInterval> | null>(null)
+  const errorMap = ref<Record<string, { total: number; errors: number }>>({})
+
+  const chapterProgress = ref(0)
+  const estimatedTimeRemaining = ref('')
+  const showAnalyticsModal = ref(false)
+  const isExtracting = ref(false)
+  const chapterData = shallowRef<any>(null)
+
+  // ─── GETTERS ────────────────────────────────────────────────
+  const totalChapters = computed(() => chapters.value.length)
+  const chapterTitle = computed(() => chapters.value[currentChapterIndex.value]?.title || `Chapter ${currentChapterIndex.value + 1}`)
+  const currentChapterContent = computed(() => chapters.value[currentChapterIndex.value]?.content || '')
+  
+  const problemKeys = computed(() => {
+    const threshold = 0.15
+    return Object.entries(errorMap.value)
+      .filter(([, stats]) => stats.total >= 5 && stats.errors / stats.total > threshold)
+      .sort((a, b) => (b[1].errors / b[1].total) - (a[1].errors / a[1].total))
+      .map(([key]) => key)
+      .slice(0, 10)
+  })
+
+  // ─── ACTIONS ────────────────────────────────────────────────
+  
+  async function initBook(markdown: string, id: string) {
+    markdownRaw.value = markdown
+    bookId.value = id
+    
+    const chaptersList: Chapter[] = []
+    const lines = markdown.split('\n')
+    let currentChapter: Chapter | null = null
+    let chapterContent: string[] = []
+
+    lines.forEach((line) => {
+      const hMatch = line.match(/^(#{1,2})\s+(.+)$/)
+      if (hMatch) {
+        if (currentChapter) {
+          currentChapter.content = chapterContent.join('\n')
+          chaptersList.push(currentChapter)
+        }
+        currentChapter = {
+          title: hMatch[2].trim(),
+          content: '',
+          index: chaptersList.length
+        }
+        chapterContent = [line]
+      } else {
+        if (!currentChapter) {
+          currentChapter = {
+            title: 'Introduction',
+            content: '',
+            index: 0
+          }
+        }
+        chapterContent.push(line)
+      }
+    })
+
+    if (currentChapter) {
+      currentChapter.content = chapterContent.join('\n')
+      chaptersList.push(currentChapter)
+    }
+
+    chapters.value = chaptersList // shallowRef only tracks this assignment
+    currentChapterIndex.value = 0
+  }
+
+  async function setMode(mode: ReadingMode) {
+    stopPacedReading()
+    stopWpmSampling()
+
+    activeMode.value = mode
+    
+    if (mode !== 'standard') {
+      await extractCurrentChapter()
+    }
+
+    if (mode === 'typing') {
+      resetTypingState()
+      startWpmSampling()
+    } else if (mode === 'paced') {
+      resetPacedState()
+    }
+  }
+
+  async function extractCurrentChapter() {
+    if (chapters.value.length === 0) return
+
+    isExtracting.value = true
+    try {
+      const content = currentChapterContent.value
+      const tokens = marked.lexer(content)
+      const paragraphs = tokens
+        .filter(t => t.type === 'paragraph' || t.type === 'heading' || t.type === 'text')
+        .map(t => {
+          const text = (t as any).text || ''
+          return text.replace(/[*_~`\[\]()]/g, '')
+        })
+        .filter(p => p.trim().length > 0)
+
+      wordTokens.value = tokenizeWords(paragraphs)
+      charTokens.value = tokenizeChars(paragraphs).map(t => ({ ...t, status: 'pending' as CharStatus }))
+      sentences.value = tokenizeSentences(paragraphs)
+      
+      chapterData.value = {
+        title: chapterTitle.value,
+        content: content,
+        paragraphs: paragraphs,
+        sentences: sentences.value,
+        wordCount: wordTokens.value.length,
+        charCount: charTokens.value.length,
+        plainText: paragraphs.join('\n\n')
+      }
+    } catch (e) {
+      console.error('Failed to extract chapter text:', e)
+    } finally {
+      isExtracting.value = false
+    }
+  }
+
+  async function goToChapter(index: number) {
+    if (index < 0 || index >= chapters.value.length) return
+
+    const wasPlaying = isPlaying.value
+
+    if (activeMode.value !== 'standard') {
+      await saveSessionToAppwrite()
+    }
+
+    currentChapterIndex.value = index
+    resetSessionStats()
+    showAnalyticsModal.value = false
+
+    if (activeMode.value !== 'standard' || isSpeedReadOverlayOpen.value) {
+      await extractCurrentChapter()
+      
+      if (activeMode.value === 'typing') {
+        resetTypingState()
+        startWpmSampling()
+      } else if (activeMode.value === 'paced' || isSpeedReadOverlayOpen.value) {
+        currentWordIndex.value = 0
+        chapterProgress.value = 0
+        
+        if (wasPlaying) {
+           isPlaying.value = true
+        } else {
+           stopPacedReading()
+        }
+      }
+    }
+  }
+
+  async function nextChapter() {
+    if (currentChapterIndex.value < chapters.value.length - 1) {
+      await goToChapter(currentChapterIndex.value + 1)
+    }
+  }
+
+  async function prevChapter() {
+    if (currentChapterIndex.value > 0) {
+      await goToChapter(currentChapterIndex.value - 1)
+    }
+  }
+
+  function resetTypingState() {
+    currentCharIndex.value = 0
+    isTypingError.value = false
+    charTokens.value = charTokens.value.map(t => ({ ...t, status: 'pending' as CharStatus }))
+    resetSessionStats()
+  }
+
+  function handleKeystroke(event: KeyboardEvent) {
+    if (activeMode.value !== 'typing') return
+    if (currentCharIndex.value >= charTokens.value.length) return
+
+    const ignoredKeys = ['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'Tab', 'Escape',
+      'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End',
+      'PageUp', 'PageDown', 'Insert', 'Delete', 'F1', 'F2', 'F3', 'F4',
+      'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12']
+    
+    if (ignoredKeys.includes(event.key)) return
+    
+    event.preventDefault()
+    handleTypingInput(event.key)
+  }
+
+  function handleTypingInput(key: string) {
+    if (activeMode.value !== 'typing') return
+    if (currentCharIndex.value >= charTokens.value.length) return
+
+    if (sessionStats.value.startTime === null) {
+      sessionStats.value.startTime = Date.now()
+    }
+
+    const currentToken = charTokens.value[currentCharIndex.value]
+
+    if (key === 'Backspace') {
+      if (isTypingError.value) {
+        isTypingError.value = false
+        currentToken.status = 'pending'
+      }
+      return
+    }
+
+    if (isTypingError.value) return
+
+    sessionStats.value.totalKeystrokes++
+
+    const expectedChar = currentToken.isNewline ? 'Enter' : currentToken.char
+
+    if (!errorMap.value[expectedChar]) {
+      errorMap.value[expectedChar] = { total: 0, errors: 0 }
+    }
+    errorMap.value[expectedChar].total++
+
+    let isCorrect = false
+    if (currentToken.isNewline) {
+      isCorrect = key === 'Enter' || key === ' '
+    } else {
+      isCorrect = key === currentToken.char
+    }
+
+    if (isCorrect) {
+      currentToken.status = 'correct'
+      sessionStats.value.correctKeystrokes++
+      currentCharIndex.value++
+      updateTypingProgress()
+
+      if (currentCharIndex.value >= charTokens.value.length) {
+        onChapterComplete()
+      }
+    } else {
+      currentToken.status = 'error'
+      isTypingError.value = true
+      sessionStats.value.errorKeystrokes++
+      errorMap.value[expectedChar].errors++
+    }
+
+    sessionStats.value.accuracy = sessionStats.value.totalKeystrokes > 0
+      ? Math.round((sessionStats.value.correctKeystrokes / sessionStats.value.totalKeystrokes) * 1000) / 10
+      : 100
+  }
+
+  function updateTypingProgress() {
+    if (charTokens.value.length > 0) {
+      chapterProgress.value = Math.round((currentCharIndex.value / charTokens.value.length) * 100)
+    }
+
+    if (sessionStats.value.currentWpm > 0) {
+      const wordsTyped = charTokens.value
+        .slice(0, currentCharIndex.value)
+        .filter(t => t.char === ' ' || t.isNewline).length
+      const totalWords = wordTokens.value.length
+      const wordsRemaining = totalWords - wordsTyped
+      const minutesRemaining = wordsRemaining / sessionStats.value.currentWpm
+      estimatedTimeRemaining.value = formatTime(minutesRemaining)
+    }
+  }
+
+  function resetPacedState() {
+    stopPacedReading()
+    currentWordIndex.value = 0
+    chapterProgress.value = 0
+    resetSessionStats()
+  }
+
+  function startPacedReading() {
+    if (isPlaying.value) return
+    if (wordTokens.value.length === 0) return
+
+    isPlaying.value = true
+    if (sessionStats.value.startTime === null) {
+      sessionStats.value.startTime = Date.now()
+    }
+  }
+
+  function stopPacedReading() {
+    isPlaying.value = false
+    if (pacedTimerId.value) {
+      clearInterval(pacedTimerId.value)
+      pacedTimerId.value = null
+    }
+  }
+
+  function togglePacedReading() {
+    if (isPlaying.value) {
+      stopPacedReading()
+    } else {
+      startPacedReading()
+    }
+  }
+
+  function skipWord(delta: number) {
+    const newIndex = Math.max(0, Math.min(currentWordIndex.value + delta, wordTokens.value.length - 1))
+    currentWordIndex.value = newIndex
+    updatePacedProgress()
+  }
+
+  function setTargetWpm(wpm: number) {
+    targetWpm.value = Math.max(50, Math.min(1000, wpm))
+  }
+
+  function updatePacedProgress() {
+    if (wordTokens.value.length > 0) {
+      chapterProgress.value = Math.round((currentWordIndex.value / wordTokens.value.length) * 100)
+    }
+
+    const wordsRemaining = wordTokens.value.length - currentWordIndex.value
+    const minutesRemaining = wordsRemaining / targetWpm.value
+    estimatedTimeRemaining.value = formatTime(minutesRemaining)
+    sessionStats.value.currentWpm = targetWpm.value
+  }
+
+  function startWpmSampling() {
+    stopWpmSampling()
+    wpmSampleTimerId.value = setInterval(() => {
+      sampleWpm()
+    }, 2000)
+  }
+
+  function stopWpmSampling() {
+    if (wpmSampleTimerId.value) {
+      clearInterval(wpmSampleTimerId.value)
+      wpmSampleTimerId.value = null
+    }
+  }
+
+  function sampleWpm() {
+    if (!sessionStats.value.startTime) return
+
+    const elapsed = Date.now() - sessionStats.value.startTime
+    sessionStats.value.elapsedMs = elapsed
+
+    if (elapsed < 1000) return
+
+    const spacesTyped = charTokens.value
+      .slice(0, currentCharIndex.value)
+      .filter(t => t.char === ' ' || t.isNewline).length
+    const wordsTyped = spacesTyped + (currentCharIndex.value > 0 ? 1 : 0)
+
+    const minutes = elapsed / 60000
+    const wpm = Math.round(wordsTyped / minutes)
+
+    sessionStats.value.currentWpm = wpm
+    if (wpm > sessionStats.value.peakWpm) {
+      sessionStats.value.peakWpm = wpm
+    }
+
+    wpmHistory.value.push({
+      time: Math.round(elapsed / 1000),
+      wpm,
+    })
+  }
+
+  function resetSessionStats() {
+    sessionStats.value = createEmptyStats()
+    wpmHistory.value = []
+    errorMap.value = {}
+    chapterProgress.value = 0
+    estimatedTimeRemaining.value = ''
+  }
+
+  async function onChapterComplete() {
+    const minReadingTime = 2000 
+    const minWordsRead = 5
+    
+    const sessionDuration = Date.now() - (sessionStats.value.startTime || Date.now())
+    const wordsRead = activeMode.value === 'typing' ? currentCharIndex.value / 5 : currentWordIndex.value
+
+    if (sessionDuration < minReadingTime || wordsRead < minWordsRead) {
+      stopPacedReading()
+      stopWpmSampling()
+      return
+    }
+
+    stopPacedReading()
+    stopWpmSampling()
+    sampleWpm()
+
+    chapterProgress.value = 100
+    showAnalyticsModal.value = true
+
+    const isLastChapter = currentChapterIndex.value === chapters.value.length - 1
+    await saveSessionToAppwrite(isLastChapter ? 'completed' : 'reading')
+  }
+
+  async function saveSessionToAppwrite(statusOverride?: 'reading' | 'completed') {
+    try {
+      const library = useLibraryStore()
+      const auth = useAuthStore()
+      if (!auth.user || !bookId.value) return
+
+      const sessionData: Record<string, unknown> = {
+        mode_preference: activeMode.value,
+        target_read_wpm: targetWpm.value,
+      }
+      
+      if (statusOverride) {
+        sessionData.status = statusOverride
+      }
+
+      if (activeMode.value === 'typing') {
+        sessionData.avg_type_wpm = sessionStats.value.currentWpm
+        sessionData.avg_accuracy = sessionStats.value.accuracy
+        sessionData.problem_keys = problemKeys.value
+      }
+
+      await library.updateProgress(
+        bookId.value,
+        `chapter-${currentChapterIndex.value}`,
+        0,
+        sessionData,
+      )
+    } catch (e) {
+      console.error('Failed to save session to Appwrite:', e)
+    }
+  }
+
+  function toggleSpeedReadOverlay() {
+    isSpeedReadOverlayOpen.value = !isSpeedReadOverlayOpen.value
+    
+    if (isSpeedReadOverlayOpen.value) {
+      if (lastVisibleText.value && lastVisibleText.value.trim().length > 0) {
+        startFocusSession(lastVisibleText.value)
+      }
+      isPlaying.value = true
+    } else {
+      stopPacedReading()
+    }
+  }
+
+  function startFocusSession(text: string) {
+    if (!text) return
+    const paragraphs = text.split(/\n+/).filter(p => p.trim().length > 0)
+    
+    wordTokens.value = tokenizeWords(paragraphs)
+    sentences.value = tokenizeSentences(paragraphs)
+    currentWordIndex.value = 0
+    currentSentenceIndex.value = 0
+  }
+
+  function setLastVisibleText(text: string) {
+    if (!text) return
+    lastVisibleText.value = text
+    
+    if (isSpeedReadOverlayOpen.value) {
+      startFocusSession(text)
+    }
+  }
+
+  function syncSpeedReadToCfi(indicator: string) {
+    console.log(`Syncing Speed Read to Position: ${indicator}`)
+    currentWordIndex.value = 0
+    currentSentenceIndex.value = 0
+  }
+
+  function cleanup() {
+    stopPacedReading()
+    stopWpmSampling()
+    markdownRaw.value = ''
+    chapters.value = []
+    charTokens.value = []
+    wordTokens.value = []
+    resetSessionStats()
+  }
+
+  return {
+    activeMode, bookId, markdownRaw, chapters, currentChapterIndex,
+    charTokens, currentCharIndex, isTypingError,
+    wordTokens, sentences, currentWordIndex, currentSentenceIndex,
+    targetWpm, isPlaying, pacedTimerId, isSpeedReadOverlayOpen, lastVisibleText,
+    sessionStats, wpmHistory, wpmSampleTimerId, errorMap,
+    chapterProgress, estimatedTimeRemaining, showAnalyticsModal, isExtracting, chapterData,
+    totalChapters, chapterTitle, currentChapterContent, problemKeys,
+    initBook, setMode, extractCurrentChapter, goToChapter, nextChapter, prevChapter,
+    resetTypingState, handleKeystroke, handleTypingInput, updateTypingProgress,
+    resetPacedState, startPacedReading, stopPacedReading, togglePacedReading, skipWord,
+    setTargetWpm, updatePacedProgress, startWpmSampling, stopWpmSampling, sampleWpm,
+    resetSessionStats, onChapterComplete, saveSessionToAppwrite, toggleSpeedReadOverlay,
+    startFocusSession, setLastVisibleText, syncSpeedReadToCfi, cleanup
+  }
+})
+

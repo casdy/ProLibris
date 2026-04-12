@@ -51,9 +51,7 @@ interface ShelfEntry {
   book: {
     $id: string
     title: string
-    author: string
     cover_url?: string
-    subjects?: string[]
   }
   session: {
     status?: string
@@ -74,7 +72,7 @@ interface ShelfEntry {
   isReading: boolean
 }
 
-function getEntriesForBooks(books: { $id: string; title: string; author: string; [key: string]: unknown }[]): ShelfEntry[] {
+function getEntriesForBooks(books: { $id: string; title: string; [key: string]: unknown }[]): ShelfEntry[] {
   return books.map((book, idx) => {
     const session = library.sessions.find(s => s.book_id === book.$id)
     return {
@@ -297,9 +295,9 @@ function scrollShelf(key: string, dir: 'left' | 'right') {
               {{ (selected.session?.status || 'unread').toUpperCase() }}
             </div>
             <h2 class="modal-title line-clamp-2">{{ selected.book.title }}</h2>
-            <p class="modal-author truncate">by {{ selected.book.author }}</p>
-            <div v-if="selected.book.subjects?.length" class="modal-subjects">
-              <span v-for="subj in selected.book.subjects.slice(0, 2)" :key="subj" class="subject-tag">{{ subj }}</span>
+            <p class="modal-author truncate">Archival Tome</p>
+            <div class="modal-subjects">
+              <span class="subject-tag">ProLibris Archive</span>
             </div>
           </div>
         </div>

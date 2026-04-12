@@ -12,9 +12,13 @@ vi.mock('@/lib/appwrite', () => ({
   databases: {
     listDocuments: vi.fn()
   },
+  storage: {
+    getFileView: vi.fn(() => ({ toString: () => 'mock-url' }))
+  },
   DATABASE_ID: 'db',
   BOOKS_COLLECTION_ID: 'books',
-  SESSIONS_COLLECTION_ID: 'sessions'
+  SESSIONS_COLLECTION_ID: 'sessions',
+  ASSETS_BUCKET_ID: 'assets'
 }))
 
 describe('useBookCatalog Hybrid Logic', () => {
@@ -26,8 +30,8 @@ describe('useBookCatalog Hybrid Logic', () => {
   it('fetchBooks correctly returns local Appwrite books', async () => {
     const mockAppwrite = {
       documents: [
-        { $id: '1', gutenberg_id: 100, title: 'Book A', author: 'A1', subjects: ['Fiction'], file_id: 'f1', cover_url: '' },
-        { $id: '2', gutenberg_id: 200, title: 'Book B', author: 'A2', subjects: ['Science'], file_id: 'f2', cover_url: '' },
+        { $id: '1', title: 'Book A', coverImageId: 'c1', markdownFileId: 'm1', $createdAt: '2026-01-01' },
+        { $id: '2', title: 'Book B', coverImageId: 'c2', markdownFileId: 'm2', $createdAt: '2026-01-02' },
       ],
       total: 2
     }
@@ -38,10 +42,8 @@ describe('useBookCatalog Hybrid Logic', () => {
     await catalog.fetchBooks(true) // forceRefresh to bypass cache
 
     expect(catalog.books.value).toHaveLength(2)
-    expect(catalog.books.value[0].isLocal).toBe(true)
-    expect(catalog.books.value[1].isLocal).toBe(true)
-    expect(catalog.books.value[0].id).toBe(100)
-    expect(catalog.books.value[1].id).toBe(200)
+    expect(catalog.books.value[0].title).toBe('Book A')
+    expect(catalog.books.value[1].title).toBe('Book B')
   })
 
   it('calculates totalPages correctly from Appwrite count', async () => {

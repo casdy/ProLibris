@@ -6,8 +6,9 @@ import { useLibraryStore, type ReadingSession } from '@/stores/library'
 import { 
   ArrowLeft, BookOpen, Target, Zap, Flame, 
   Award, Library, Clock, Heart, Sparkles, MoveRight,
-  TrendingUp, Star, Loader2
+  TrendingUp, Star, Loader2, Check, ExternalLink
 } from 'lucide-vue-next'
+import { Genres } from '@/lib/genreMapper'
 import AppLogo from '@/components/AppLogo.vue'
 
 const router = useRouter()
@@ -61,15 +62,19 @@ const favoriteGenre = computed(() => {
   const genres: Record<string, number> = {}
   library.sessions.forEach(s => {
     const book = library.allBooks.find(b => b.$id === s.book_id)
-    if (book) {
-      book.subjects.forEach(g => {
+    // Defensive check: handle books with missing subjects (headless mode)
+    if (book && Array.isArray((book as any).subjects)) {
+      (book as any).subjects.forEach((g: string) => {
         genres[g] = (genres[g] || 0) + 1
       })
     }
   })
   
   const sorted = Object.entries(genres).sort((a, b) => b[1] - a[1])
-  return sorted[0]?.[0] || 'The Unknown'
+  if (sorted.length > 0) return sorted[0][0]
+  
+  // High-fidelity fallback for headless library
+  return library.sessions.length > 0 ? 'Universal Archive' : 'The Unknown'
 })
 
 const wizardingRank = computed(() => {
@@ -82,6 +87,17 @@ const wizardingRank = computed(() => {
 })
 
 const goBack = () => router.push('/dashboard')
+
+const toggleInterest = async (genre: string) => {
+  const current = [...(auth.user?.prefs?.interests || [])]
+  let next: string[] = []
+  if (current.includes(genre)) {
+    next = current.filter(g => g !== genre)
+  } else {
+    next = [...current, genre]
+  }
+  await auth.updateInterests(next)
+}
 
 onMounted(async () => {
   isSyncing.value = true
@@ -199,10 +215,10 @@ onMounted(async () => {
       <!-- Advanced Analytics Row -->
       <section class="grid lg:grid-cols-3 gap-8">
         
-        <!-- Favorit Genre Card -->
-        <div class="lg:col-span-2 theme-card p-10 rounded-[3rem] border theme-border relative group overflow-hidden bg-gradient-to-br from-[#1a0f05] to-transparent">
+        <!-- Dominant Archive Card -->
+        <div class="lg:col-span-2 theme-card p-10 rounded-[3rem] relative group overflow-hidden">
           <div class="flex items-center justify-between mb-8">
-            <div class="space-y-1">
+            <div class="space-y-1 text-left">
               <h3 class="text-2xl font-black theme-text font-cinzel uppercase">Dominant Archive</h3>
               <p class="text-sm theme-text-soft opacity-60 font-medium">Your most explored literary subject</p>
             </div>
@@ -223,6 +239,31 @@ onMounted(async () => {
                    <span class="px-4 py-1.5 rounded-xl bg-[#AE0001]/10 border border-[#AE0001]/20 text-xs font-bold uppercase tracking-widest text-[#AE0001]">Scarlet Archivist</span>
                 </div>
              </div>
+          </div>
+        </div>
+        <!-- Archival Interests (Manual Control) -->
+        <div class="theme-card p-10 rounded-[3rem] border theme-border relative group overflow-hidden">
+          <div class="flex items-center justify-between mb-8">
+            <div class="space-y-1 text-left">
+              <h3 class="text-xl font-black theme-text font-cinzel uppercase">Archival Interests</h3>
+              <p class="text-[10px] theme-text-soft opacity-60 font-medium">Explicitly manifest your focus</p>
+            </div>
+            <Sparkles class="w-6 h-6 text-[#EEBA30] opacity-40 group-hover:opacity-100 transition-opacity" />
+          </div>
+
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-for="genre in Genres"
+              :key="genre"
+              @click="toggleInterest(genre)"
+              :class="(auth.user?.prefs?.interests || []).includes(genre)
+                ? 'bg-[#AE0001] text-white border-[#AE0001] shadow-lg shadow-[#AE0001]/20'
+                : 'theme-card theme-text-soft border theme-border hover:bg-white/5 font-medium'"
+              class="px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all duration-200 flex items-center gap-1.5"
+            >
+              {{ genre }}
+              <Check v-if="(auth.user?.prefs?.interests || []).includes(genre)" class="w-3 h-3" />
+            </button>
           </div>
         </div>
 
@@ -250,7 +291,7 @@ onMounted(async () => {
       </section>
 
       <!-- Vault Progress Bar -->
-      <section class="theme-card p-10 rounded-[3rem] border theme-border bg-gradient-to-r from-[#AE0001]/5 to-transparent">
+      <section class="theme-card p-10 rounded-[3rem]">
          <div class="flex flex-col md:flex-row items-center gap-12">
             <div class="space-y-2 flex-shrink-0">
                <h3 class="text-3xl font-black theme-text font-cinzel">COLLECTION GROWTH</h3>
@@ -293,13 +334,7 @@ onMounted(async () => {
 }
 
 .theme-card {
-  background: rgba(40, 22, 10, 0.2);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-}
-
-.dark .theme-card {
-  background: rgba(20, 10, 5, 0.4);
+  transition: all 0.3s ease;
 }
 
 .animate-pulse {

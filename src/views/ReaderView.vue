@@ -5,7 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useLibraryStore } from '@/stores/library'
 import { useReaderStore } from '@/stores/reader'
 import { useUIStore } from '@/stores/ui'
-import { storage, BUCKET_ID } from '@/lib/appwrite'
+import { storage, ASSETS_BUCKET_ID } from '@/lib/appwrite'
 import ReaderLayout from '@/components/reader/ReaderLayout.vue'
 import { X, Settings, Moon, Sun, Type, Loader2 } from 'lucide-vue-next'
 
@@ -23,8 +23,8 @@ const error = ref('')
 const fontSize = ref(100)
 const isDark = computed(() => ui.isDark)
 const showSettings = ref(false)
-const epubData = ref<ArrayBuffer | null>(null)
-const initialCfi = ref<string | undefined>(undefined)
+const markdownContent = ref<string | null>(null)
+const initialPos = ref<string | undefined>(undefined)
 
 // Debounced save progress
 let saveTimeout: ReturnType<typeof setTimeout> | null = null
@@ -36,13 +36,13 @@ interface ReaderAnalytics {
   target_read_wpm?: number
 }
 
-const saveProgress = (cfi: string) => {
+const saveProgress = (pos: string) => {
   if (saveTimeout) clearTimeout(saveTimeout)
-  
+
   // Archival Analytics Synchronization
-  const isLastChapter = reader.currentSpineIndex === (reader.spineItems.length - 1)
+  const isLastChapter = reader.currentChapterIndex === (reader.chapters.length - 1)
   const status = isLastChapter ? 'completed' : 'reading'
-  
+
   const analyticsData: ReaderAnalytics = { status }
   if (reader.activeMode === 'typing') {
     analyticsData.avg_type_wpm = Math.round(reader.sessionStats.currentWpm)
@@ -54,9 +54,9 @@ const saveProgress = (cfi: string) => {
   } else {
     analyticsData.mode_preference = 'standard'
   }
-  
+
   saveTimeout = setTimeout(() => {
-    library.updateProgress(bookId, cfi, 1, analyticsData as unknown as Record<string, unknown>)
+    library.updateProgress(bookId, pos, 1, analyticsData as unknown as Record<string, unknown>)
   }, 3000)
 }
 
@@ -70,17 +70,10 @@ const initializeReader = async () => {
       return
     }
 
-    const source = route.query.source as string
-    if (source === 'gutendex') {
-      error.value = 'Direct Gutenberg links are no longer manifested. Please summon books via the Archive first.'
-      loading.value = false
-      return
-    }
-
     // 2. Normal Local Appwrite Reading
     if (!bookMetadata.value) {
       await library.fetchBooks()
-      bookMetadata.value = library.books.find(b => b.$id === bookId) || 
+      bookMetadata.value = library.books.find(b => b.$id === bookId) ||
                            library.allBooks.find(b => b.$id === bookId)
     }
 
@@ -90,33 +83,30 @@ const initializeReader = async () => {
       return
     }
 
-    // 3. Download EPUB as ArrayBuffer from Appwrite
-    const fileUrl = storage.getFileDownload(BUCKET_ID, bookMetadata.value.file_id).toString()
-    console.log('Streaming archival EPUB from:', fileUrl)
+    // 3. Download Markdown as Text from Appwrite Storage
+    // Use .getFileView() for direct access or .getFileDownload() for download enforcement
+    const fileUrl = storage.getFileView(ASSETS_BUCKET_ID, bookMetadata.value.markdownFileId).toString()
+    console.log('Streaming archival Markdown from:', fileUrl)
 
     const response = await fetch(fileUrl, {
       mode: 'cors',
       credentials: 'include',
     })
-    
+
     if (!response.ok) {
-      if (response.status === 404) {
-        const missingId = bookMetadata.value.file_id
-        if (missingId === '69cc8c220a6791207b') {
-          throw new Error('Archive Sync Error: The requested tome (ID: 69cc8c2...07b) has lost its physical manifestation in the cloud bucket. Please contact the Archivist.')
-        }
-        throw new Error(`Cloud Storage 404: The physical EPUB file (ID: ${missingId}) is missing from the archive storage bucket.`)
-      }
-      throw new Error(`EPUB download failed (${response.status}). Archive ID: ${bookMetadata.value.file_id}`)
+      error.value = `Markdown download failed (${response.status}). Archive ID: ${bookMetadata.value.markdownFileId}`
+      loading.value = false
+      return
     }
-    
-    epubData.value = await response.arrayBuffer()
+
+    const text = await response.text()
+    markdownContent.value = text
 
     // 4. Restore progress and settings
     await library.fetchUserSessions()
     const session = library.sessions.find(s => s.book_id === bookMetadata.value?.$id || bookId)
     if (session?.progress_cfi) {
-      initialCfi.value = session.progress_cfi
+      initialPos.value = session.progress_cfi
     }
     if (session?.mode_preference) {
       reader.activeMode = session.mode_preference
@@ -125,14 +115,12 @@ const initializeReader = async () => {
       reader.targetWpm = session.target_read_wpm
     }
 
-    // 5. Set book ID on reader store — the actual epub.js book instance
-    //    will be created by StandardEngine and provided via @spine-loaded.
-    //    This avoids parsing the EPUB twice, which causes blank screens on mobile.
+    // 5. Initialize Reader Store
     const finalBookId = bookMetadata.value?.$id || bookId
-    reader.bookId = finalBookId
-    
-    // Manifest the "Archival Touch": Update last_read_at as soon as the portal opens
-    await library.updateProgress(finalBookId, initialCfi.value || "", 0)
+    await reader.initBook(text, finalBookId)
+
+    // Manifest the "Archival Touch": Update last_read_at
+    await library.updateProgress(finalBookId, initialPos.value || "", 0)
 
     loading.value = false
   } catch (e: unknown) {
@@ -170,7 +158,7 @@ onUnmounted(() => {
         </button>
         <div class="hidden sm:block">
           <h2 class="font-bold line-clamp-1 max-w-md">{{ bookMetadata?.title }}</h2>
-          <p class="text-xs opacity-60 font-medium">{{ bookMetadata?.author }}</p>
+          <p class="text-xs opacity-60 font-medium">Archival Tome</p>
         </div>
       </div>
 
@@ -195,7 +183,7 @@ onUnmounted(() => {
       <!-- Loading -->
       <div v-if="loading" class="absolute inset-0 flex flex-col items-center justify-center bg-inherit z-50">
         <div class="w-12 h-12 border-4 border-[#f02e65]/20 border-t-[#f02e65] rounded-full animate-spin mb-4" />
-        <p class="font-bold opacity-60">Streaming EPUB from Appwrite Store...</p>
+        <p class="font-bold opacity-60">Streaming Markdown from Appwrite Store...</p>
       </div>
 
       <!-- Error -->
@@ -209,11 +197,11 @@ onUnmounted(() => {
         </button>
       </div>
 
-      <!-- Reader Layout with Mode Switching -->
+      <!-- Reader Layout with Markdown Rendering -->
       <ReaderLayout
-        v-else-if="epubData"
-        :book-data="epubData"
-        :initial-cfi="initialCfi"
+        v-else-if="markdownContent"
+        :markdown-content="markdownContent"
+        :initial-pos="initialPos"
         :is-dark="isDark"
         :font-size="fontSize"
         @error="msg => (error = msg)"
@@ -226,7 +214,7 @@ onUnmounted(() => {
         <Loader2 class="w-10 h-10 text-[#AE0001] animate-spin mb-2" />
         <p class="font-bold theme-text opacity-80">Wait... the tome is still manifesting...</p>
         <p class="text-[10px] opacity-40 max-w-sm uppercase tracking-widest leading-relaxed">
-          The ProLibris engine is preparing your private archival copy. 
+          The ProLibris engine is preparing your private archival copy.
           If the parchment remains empty, please return to the dashboard.
         </p>
         <button

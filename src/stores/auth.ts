@@ -44,6 +44,11 @@ export const useAuthStore = defineStore('auth', {
         ?? (typeof window !== 'undefined' ? window.location.origin : '')
       const url = `${resolvedOrigin}/verify-complete`
       await account.createVerification(url)
+    },
+    async updateInterests(genres: string[]) {
+      if (!this.user) return
+      this.user.prefs = { ...this.user.prefs, interests: genres }
+      await account.updatePrefs(this.user.prefs)
     }
   },
 })

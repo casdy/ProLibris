@@ -5,7 +5,7 @@ export const APPWRITE_PROJECT_ID = "69cc7978000d9666e135"
 export const DATABASE_ID = 'ReaderAppDB'
 export const BOOKS_COLLECTION_ID = 'Books'
 export const SESSIONS_COLLECTION_ID = 'ReadingSessions'
-export const BUCKET_ID = 'EPUB_Files'
+export const ASSETS_BUCKET_ID = 'Library_Assets'
 
 const client = new Client()
   .setEndpoint(APPWRITE_ENDPOINT)

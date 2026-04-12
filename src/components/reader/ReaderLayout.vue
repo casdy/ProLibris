@@ -4,53 +4,49 @@ import { useRouter } from 'vue-router'
 import { ref } from 'vue'
 import ModeSwitcher from './ModeSwitcher.vue'
 import ReadingHUD from './ReadingHUD.vue'
-import StandardEngine from './StandardEngine.vue'
+import MarkdownEngine from './MarkdownEngine.vue'
 import TypingEngine from './TypingEngine.vue'
 import SpeedReadEngine from './SpeedReadEngine.vue'
 import AnalyticsModal from './AnalyticsModal.vue'
 import { ChevronLeft, ChevronRight } from 'lucide-vue-next'
-import type { Book } from 'epubjs'
 
 defineProps<{
-  bookData: ArrayBuffer
-  initialCfi?: string
+  markdownContent: string
+  initialPos?: string
   isDark: boolean
   fontSize: number
 }>()
 
 const emit = defineEmits<{
-  relocated: [cfi: string]
+  relocated: [pos: string]
   error: [message: string]
   'update-font-size': [size: number]
 }>()
 
 const router = useRouter()
 const reader = useReaderStore()
-const standardEngine = ref<InstanceType<typeof StandardEngine> | null>(null)
+const markdownEngine = ref<InstanceType<typeof MarkdownEngine> | null>(null)
+const isTransitioning = ref(false)
 
-const onSpineLoaded = async (book: Book) => {
-  // reader.bookId is already set by ReaderView before this component mounts.
-  // Use it here so session saving and chapter extraction work correctly.
-  await reader.initBook(book, reader.bookId)
+// Debounce for navigation
+let navDebounceTimer: ReturnType<typeof setTimeout> | null = null
+const DEBOUNCE_MS = 250
 
-  // Now that the book is ready, extract the first chapter for non-standard modes
-  await reader.extractCurrentChapter()
-
-  if (reader.activeMode === 'typing') {
-    reader.resetTypingState()
-    reader.startWpmSampling()
-  } else if (reader.activeMode === 'paced') {
-    reader.resetPacedState()
-  }
+const debouncedNav = (action: () => void) => {
+  if (navDebounceTimer) return
+  action()
+  navDebounceTimer = setTimeout(() => {
+    navDebounceTimer = null
+  }, DEBOUNCE_MS)
 }
 
-const onRelocated = (cfi: string) => {
-  emit('relocated', cfi)
+const onRelocated = (pos: string) => {
+  emit('relocated', pos)
 }
 
 const handleNextChapter = async () => {
   reader.showAnalyticsModal = false
-  await reader.nextChapter()
+  debouncedNav(() => reader.nextChapter())
 }
 
 const handleBackToDashboard = () => {
@@ -58,15 +54,18 @@ const handleBackToDashboard = () => {
 }
 
 const handlePageComplete = () => {
-  if (standardEngine.value) {
+  if (markdownEngine.value) {
     console.log('Focus page complete, advancing...')
-    standardEngine.value.nextPage()
+    markdownEngine.value.nextPage()
   }
 }
 </script>
 
 <template>
-  <div class="flex-1 flex flex-col w-full h-full theme-bg transition-colors duration-500">
+  <div 
+    class="flex-1 flex flex-col w-full h-full theme-bg transition-colors duration-500"
+    :class="{ 'pointer-events-none': isTransitioning }"
+  >
     <!-- Top Controls Bar -->
     <div class="shrink-0 px-4 py-2 flex flex-col sm:flex-row items-center gap-3 border-b theme-border bg-black/5 dark:bg-white/2 backdrop-blur-md">
       <!-- Mode Switcher -->
@@ -79,22 +78,22 @@ const handlePageComplete = () => {
         <ReadingHUD />
       </div>
 
-      <!-- Chapter nav (non-standard modes) -->
-      <div v-if="reader.activeMode !== 'standard' && reader.totalChapters > 1" class="flex items-center gap-2">
+      <!-- Chapter nav -->
+      <div v-if="reader.totalChapters > 1" class="flex items-center gap-2">
         <button
-          @click="reader.prevChapter()"
-          :disabled="reader.currentSpineIndex <= 0"
+          @click="debouncedNav(() => reader.prevChapter())"
+          :disabled="reader.currentChapterIndex <= 0 || isTransitioning"
           class="p-2 rounded-xl bg-black/5 dark:bg-white/5 hover:bg-[#f02e65]/10 hover:text-[#f02e65] transition-all disabled:opacity-20 disabled:pointer-events-none theme-text"
           title="Previous chapter"
         >
           <ChevronLeft class="w-4 h-4" />
         </button>
         <span class="text-xs font-bold text-[var(--text-soft)] opacity-60 whitespace-nowrap">
-          Ch. {{ reader.currentSpineIndex + 1 }}/{{ reader.totalChapters }}
+          Ch. {{ reader.currentChapterIndex + 1 }}/{{ reader.totalChapters }}
         </span>
         <button
-          @click="reader.nextChapter()"
-          :disabled="reader.currentSpineIndex >= reader.totalChapters - 1"
+          @click="debouncedNav(() => reader.nextChapter())"
+          :disabled="reader.currentChapterIndex >= reader.totalChapters - 1 || isTransitioning"
           class="p-2 rounded-xl bg-black/5 dark:bg-white/5 hover:bg-[#f02e65]/10 hover:text-[#f02e65] transition-all disabled:opacity-20 disabled:pointer-events-none theme-text"
           title="Next chapter"
         >
@@ -104,32 +103,48 @@ const handlePageComplete = () => {
     </div>
 
     <!-- Engine Area -->
-    <div class="flex-1 min-h-0 relative theme-bg">
-      <!-- Standard Mode -->
-      <StandardEngine
-        v-if="reader.activeMode === 'standard'"
-        ref="standardEngine"
-        :book-data="bookData"
-        :initial-cfi="initialCfi"
-        :is-dark="isDark"
-        :font-size="fontSize"
-        @relocated="onRelocated"
-        @spine-loaded="onSpineLoaded"
-        @error="e => emit('error', e)"
-      />
+    <div class="flex-1 min-h-0 relative theme-bg overflow-hidden">
+      <Transition 
+        name="engine" 
+        mode="out-in"
+        @before-enter="isTransitioning = true"
+        @after-enter="isTransitioning = false"
+        @before-leave="isTransitioning = true"
+        @after-leave="isTransitioning = false"
+      >
+        <!-- Standard Mode -->
+        <MarkdownEngine
+          v-if="reader.activeMode === 'standard'"
+          :key="'standard'"
+          ref="markdownEngine"
+          :markdown-content="markdownContent"
+          :initial-pos="initialPos"
+          :is-dark="isDark"
+          :font-size="fontSize"
+          @relocated="onRelocated"
+          @error="e => emit('error', e)"
+        />
 
-      <!-- Typing Mode -->
-      <TypingEngine
-        v-else-if="reader.activeMode === 'typing'"
-      />
+        <!-- Typing Mode -->
+        <TypingEngine
+          v-else-if="reader.activeMode === 'typing'"
+          :key="'typing'"
+        />
+      </Transition>
     </div>
 
     <!-- Speed Read Focus Overlay (Seamless Integration) -->
-    <Transition name="overlay">
+    <Transition 
+      name="overlay"
+      @before-enter="isTransitioning = true"
+      @after-enter="isTransitioning = false"
+      @before-leave="isTransitioning = true"
+      @after-leave="isTransitioning = false"
+    >
       <div v-if="reader.isSpeedReadOverlayOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-8">
         <!-- Backdrop Backdrop -->
         <div 
-          class="absolute inset-0 bg-[#0d0702]/85 backdrop-blur-2xl"
+          class="absolute inset-0 bg-[#0d0702]/85 backdrop-blur-3xl transition-opacity duration-300"
           @click="reader.toggleSpeedReadOverlay()"
         />
         
@@ -153,24 +168,43 @@ const handlePageComplete = () => {
 </template>
 
 <style scoped>
+/* Engine mode transitions */
+.engine-enter-active,
+.engine-leave-active {
+  transition: all 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform, opacity;
+}
+
+.engine-enter-from {
+  opacity: 0;
+  transform: translate3d(0, 10px, 0);
+}
+
+.engine-leave-to {
+  opacity: 0;
+  transform: translate3d(0, -10px, 0);
+}
+
+/* Speed Read Overlay transitions */
 .overlay-enter-active,
 .overlay-leave-active {
-  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform, opacity, backdrop-filter;
 }
 
 .overlay-enter-from,
 .overlay-leave-to {
   opacity: 0;
-  transform: scale(1.05);
+  transform: translate3d(0, 0, 0) scale(1.02);
   backdrop-filter: blur(0px);
 }
 
 @keyframes overlay-in {
-  from { opacity: 0; transform: translateY(20px) scale(0.98); }
+  from { opacity: 0; transform: translateY(15px) scale(0.99); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .animate-overlay-in {
-  animation: overlay-in 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: overlay-in 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 </style>

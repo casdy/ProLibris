@@ -1,15 +1,16 @@
 import { defineStore } from 'pinia'
-import { databases, DATABASE_ID, BOOKS_COLLECTION_ID, SESSIONS_COLLECTION_ID } from '@/lib/appwrite'
+import { databases, DATABASE_ID, BOOKS_COLLECTION_ID, SESSIONS_COLLECTION_ID, ASSETS_BUCKET_ID, storage } from '@/lib/appwrite'
 import { ID, Query, type Models } from 'appwrite'
 import { useAuthStore } from './auth'
+import { mapTitleToGenre, Genres, type Genre } from '@/lib/genreMapper'
 
 export interface Book extends Models.Document {
   title: string
-  author: string
-  subjects: string[]
-  cover_url: string
-  file_id: string
-  gutenberg_id: number
+  coverImageId: string
+  markdownFileId: string
+  subjects?: string[] // Re-introducing metadata field
+  // Virtual properties calculated for UI
+  cover_url?: string
 }
 
 export interface ReadingSession extends Models.Document {
@@ -42,10 +43,8 @@ function sortBooks(list: Book[], sortBy: string): Book[] {
   const sorted = [...list]
   if (sortBy === 'title') {
     sorted.sort((a, b) => a.title.localeCompare(b.title))
-  } else if (sortBy === 'author') {
-    sorted.sort((a, b) => a.author.localeCompare(b.author))
-  } else if (sortBy === 'genre') {
-    sorted.sort((a, b) => (a.subjects[0] || '').localeCompare(b.subjects[0] || ''))
+  } else if (sortBy === 'newest') {
+    sorted.sort((a, b) => new Date(b.$createdAt).getTime() - new Date(a.$createdAt).getTime())
   }
   return sorted
 }
@@ -68,7 +67,6 @@ export const useLibraryStore = defineStore('library', {
   }),
   getters: {
     books(state) {
-      // Backward-compatible: returns enchanted or search results
       return state.isSearching ? state.searchResults : state.enchantedBooks
     },
     likedBooks(state) {
@@ -101,20 +99,42 @@ export const useLibraryStore = defineStore('library', {
       }).filter(item => item.book)
     },
     recommendations(): Book[] {
-      return this.enchantedBooks
+      // Prioritize books matching user affinity
+      const favorites = this.userPreferredGenres
+      if (favorites.length === 0) return this.enchantedBooks
+
+      return [...this.allBooks].filter(b => 
+        b.subjects?.some(s => favorites.includes(s))
+      ).slice(0, 30)
+    },
+    userPreferredGenres(state): string[] {
+      const auth = useAuthStore()
+      const manualInterests = (auth.user?.prefs?.interests as string[]) || []
+      
+      if (manualInterests.length > 0) return manualInterests
+
+      // Fallback: calculate top 3 genres from reading sessions
+      const genres: Record<string, number> = {}
+      state.sessions.forEach(s => {
+        const book = state.allBooks.find(b => b.$id === s.book_id)
+        if (book?.subjects) {
+          book.subjects.forEach(g => {
+            genres[g] = (genres[g] || 0) + 1
+          })
+        }
+      })
+      
+      return Object.entries(genres)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([g]) => g)
     },
     filteredEnchanted(state): Book[] {
-      let list = [...state.enchantedBooks]
-      if (state.enchantedFilter.genre) {
-        list = list.filter(b => b.subjects.includes(state.enchantedFilter.genre))
-      }
+      const list = [...state.enchantedBooks]
       return sortBooks(list, state.enchantedFilter.sort)
     },
     filteredDiscover(state): Book[] {
-      let list = [...state.discoverBooks]
-      if (state.discoverFilter.genre) {
-        list = list.filter(b => b.subjects.includes(state.discoverFilter.genre))
-      }
+      const list = [...state.discoverBooks]
       return sortBooks(list, state.discoverFilter.sort)
     }
   },
@@ -122,7 +142,6 @@ export const useLibraryStore = defineStore('library', {
     async fetchBooks() {
       this.loading = true
       try {
-        // Fetch ALL books from the database (paginated, 100 per request)
         const allDocs: Book[] = []
         let offset = 0
         const limit = 100
@@ -133,22 +152,34 @@ export const useLibraryStore = defineStore('library', {
             Query.limit(limit),
             Query.offset(offset),
           ])
-          allDocs.push(...response.documents)
+          
+          // Enrich with cover_url for UI compatibility
+          const enriched = response.documents.map(doc => {
+            const url = storage.getFileView(ASSETS_BUCKET_ID, doc.coverImageId).toString()
+            return { ...doc, cover_url: url }
+          })
+          
+          allDocs.push(...enriched)
           offset += limit
           hasMore = response.documents.length === limit
         }
 
         this.allBooks = allDocs
+        
+        // Extract unique genres from available metadata + Mapper
+        const genresSet = new Set<string>()
+        allDocs.forEach(b => {
+          // If subjects missing or empty, use Mapper
+          if (!b.subjects || b.subjects.length === 0) {
+            b.subjects = mapTitleToGenre(b.title)
+          }
+          b.subjects.forEach(g => genresSet.add(g))
+        })
+        
+        this.allGenres = Array.from(Genres).sort() // Always show the standard set
 
-        // Extract unique genres from all subjects
-        const genreSet = new Set<string>()
-        allDocs.forEach(b => b.subjects.forEach(s => genreSet.add(s)))
-        this.allGenres = [...genreSet].sort()
-
-        // Generate 30 recommended books — diverse by category
         this.generateRecommendations()
 
-        // Cache recommended book IDs for offline
         try {
           localStorage.setItem('prolibris_recommended', JSON.stringify(this.enchantedBooks.map((b: Book) => b.$id)))
         } catch (e) {
@@ -160,23 +191,21 @@ export const useLibraryStore = defineStore('library', {
     },
 
     generateRecommendations() {
-      // Pick 30 diverse books for the Enchanted Selection
       const shuffled = shuffleArray(this.allBooks)
       this.enchantedBooks = shuffled.slice(0, 30)
       
-      // Pick 40 MORE unique books for Discover More
       const usedIds = new Set(this.enchantedBooks.map(b => b.$id))
       this.discoverBooks = shuffled
         .filter((b: Book) => !usedIds.has(b.$id))
         .slice(0, 40)
     },
 
-    setEnchantedFilter(genre: string, sort: string) {
-      this.enchantedFilter = { genre, sort }
+    setEnchantedFilter(_genre: string, sort: string) {
+      this.enchantedFilter.sort = sort
     },
 
-    setDiscoverFilter(genre: string, sort: string) {
-      this.discoverFilter = { genre, sort }
+    setDiscoverFilter(_genre: string, sort: string) {
+      this.discoverFilter.sort = sort
     },
 
     searchBooks(query: string) {
@@ -192,10 +221,7 @@ export const useLibraryStore = defineStore('library', {
       const q = this.searchQuery.toLowerCase()
 
       this.searchResults = this.allBooks.filter(book => {
-        const titleMatch = book.title.toLowerCase().includes(q)
-        const authorMatch = book.author.toLowerCase().includes(q)
-        const subjectMatch = book.subjects.some(s => s.toLowerCase().includes(q))
-        return titleMatch || authorMatch || subjectMatch
+        return book.title.toLowerCase().includes(q)
       })
     },
 
@@ -228,7 +254,6 @@ export const useLibraryStore = defineStore('library', {
         pages_turned: (session?.pages_turned || 0) + pagesInc,
       }
 
-      // Merge analytics data if provided
       if (analyticsData) {
         Object.assign(data, analyticsData)
       }

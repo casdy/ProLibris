@@ -82,15 +82,26 @@ const router = createRouter({
 
 router.beforeEach(async (to, from, next) => {
   const auth = useAuthStore()
-  if (auth.loading) await auth.init()
+  
+  // Ensure session is restored before any routing decisions
+  if (auth.loading) {
+    await auth.init()
+  }
 
-  if (to.meta.requiresAuth && !auth.user) {
-    next('/login')
-  } else if (to.path === '/login' && auth.user) {
+  const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
+  const requiresVerification = to.matched.some(record => record.meta.requiresVerification)
+
+  if (requiresAuth && !auth.user) {
+    // If we are definitely not logged in, go to login
+    next({ name: 'login', query: { redirect: to.fullPath } })
+  } else if (to.name === 'login' && auth.user) {
+    // If logged in and trying to access login page, go to dashboard
     next('/dashboard')
-  } else if (to.meta.requiresVerification && !auth.isVerified && to.path !== '/verify-pending') {
-    next('/verify-pending')
+  } else if (requiresVerification && !auth.isVerified && to.name !== 'verify-pending') {
+    // If verification is required but not done
+    next({ name: 'verify-pending' })
   } else {
+    // Proceed to the requested route (preserves /profile, /read, etc.)
     next()
   }
 })

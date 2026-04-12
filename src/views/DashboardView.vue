@@ -14,6 +14,7 @@ import BookstoreView from '@/components/BookstoreView.vue'
 import BookshelfView from '@/components/BookshelfView.vue'
 import BookPagination from '@/components/BookPagination.vue'
 import AppLogo from '@/components/AppLogo.vue'
+import OnboardingWidget from '@/components/dashboard/OnboardingWidget.vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
@@ -21,23 +22,33 @@ const router = useRouter()
 const auth = useAuthStore()
 const library = useLibraryStore()
 const ui = useUIStore()
-const catalog = useBookCatalog()
+const { 
+  books: catalogBooks, 
+  isLoading: isCatalogLoading, 
+  totalCount,
+  totalPages, 
+  currentPage, 
+  filters: catalogFilters, 
+  fetchBooks: fetchCatalog,
+  changePage,
+  updateFilters
+} = useBookCatalog()
 
 const activeTab = ref('discover')
 const isFilterDrawerOpen = ref(false)
-const searchInput = ref(catalog.filters.search)
+const searchInput = ref(catalogFilters.search)
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
 watch(searchInput, (val) => {
   if (debounceTimer) clearTimeout(debounceTimer)
   debounceTimer = setTimeout(() => {
-    catalog.updateFilters({ search: val })
+    updateFilters({ search: val })
   }, 500)
 })
 
 const clearSearch = () => {
   searchInput.value = ''
-  catalog.updateFilters({ search: '' })
+  updateFilters({ search: '' })
 }
 
 onMounted(async () => {
@@ -64,11 +75,11 @@ const stats = computed(() => {
   ]
 })
 
-const isSearching = computed(() => !!catalog.filters.search)
+const isSearching = computed(() => !!catalogFilters.search)
 
 const sectionTitle = computed(() => {
   if (isSearching.value)
-    return `${catalog.totalCount.value.toLocaleString()} result${catalog.totalCount.value !== 1 ? 's' : ''} for "${catalog.filters.search}"`
+    return `${totalCount.value.toLocaleString()} result${totalCount.value !== 1 ? 's' : ''} for "${catalogFilters.search}"`
   return 'Private Collection'
 })
 
@@ -159,8 +170,11 @@ const greeting = computed(() => {
     <main v-if="activeTab === 'discover'" class="flex-1 max-w-7xl mx-auto w-full p-6 lg:p-12 space-y-16 animate-fade-in">
 
       <!-- Welcome Hero & Stats -->
-      <section v-if="!isSearching" class="grid lg:grid-cols-3 gap-8 items-stretch">
-        <div class="lg:col-span-2 relative bg-gradient-to-br from-[#1a0f05] via-[#2a180d] to-[#3d2212] rounded-[2.5rem] p-10 overflow-hidden shadow-2xl flex flex-col justify-between min-h-[320px]">
+      <section v-if="!isSearching" class="space-y-12">
+        <OnboardingWidget />
+        
+        <div class="grid lg:grid-cols-3 gap-8 items-stretch">
+        <div class="lg:col-span-2 relative bg-gradient-to-br from-[var(--bg-app)] via-[#2a180d]/10 to-[#3d2212]/20 dark:from-[#1a0f05] dark:via-[#2a180d] dark:to-[#3d2212] theme-card rounded-[2.5rem] p-10 overflow-hidden shadow-2xl flex flex-col justify-between min-h-[320px]">
           <div class="absolute top-0 right-0 w-[40%] h-full bg-gradient-to-l from-amber-500/10 to-transparent blur-3xl opacity-20 pointer-events-none" />
           <div class="z-10">
             <h2 class="text-2xl sm:text-3xl lg:text-5xl font-bold text-white mb-4 tracking-tight leading-tight truncate">
@@ -179,7 +193,7 @@ const greeting = computed(() => {
             <div class="flex-1 min-w-0">
               <p class="text-[10px] uppercase font-black tracking-widest text-[#EEBA30] mb-1">Continue Reading</p>
               <h4 class="text-white font-bold text-lg mb-1 leading-tight line-clamp-2">{{ library.continueReadingBook.title }}</h4>
-              <p class="text-white/40 text-sm font-medium mb-3 line-clamp-2">{{ library.continueReadingBook.author }}</p>
+              <p class="text-white/40 text-sm font-medium mb-3 line-clamp-2">Archival Tome</p>
               <router-link 
                 @click.stop
                 :to="`/read/${library.continueReadingBook.$id}`" 
@@ -194,7 +208,8 @@ const greeting = computed(() => {
         <div class="grid gap-6">
           <StatsCard v-for="stat in stats" :key="stat.title" v-bind="stat" />
         </div>
-      </section>
+      </div>
+    </section>
 
       <!-- Search & Filters Bar (Desktop) -->
       <section class="hidden md:block space-y-6">
@@ -214,8 +229,8 @@ const greeting = computed(() => {
           
           <div class="flex items-center gap-2">
             <select 
-              :value="catalog.filters.sort"
-              @change="catalog.updateFilters({ sort: ($event.target as HTMLSelectElement).value })"
+              :value="catalogFilters.sort"
+              @change="updateFilters({ sort: ($event.target as HTMLSelectElement).value })"
               class="px-4 py-4.5 theme-card theme-text border theme-border rounded-2xl outline-none focus:border-[#f02e65] transition-all text-sm font-bold appearance-none cursor-pointer pr-10 bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:20px] bg-[position:right_12px_center] bg-no-repeat shadow-inner"
             >
               <option value="popular">Popularity</option>
@@ -227,13 +242,21 @@ const greeting = computed(() => {
         
         <div v-if="!isSearching" class="flex flex-wrap items-center justify-center gap-2">
           <button 
-            v-for="topic in ['Fiction', 'History', 'Mystery', 'Science', 'Poetry', 'Philosophy']"
-            :key="topic"
-            @click="catalog.updateFilters({ topic: catalog.filters.topic === topic ? '' : topic })"
-            :class="catalog.filters.topic === topic ? 'bg-[#AE0001] text-white' : 'theme-card theme-text-soft hover:theme-text'"
-            class="px-5 py-2.5 rounded-xl border theme-border text-sm font-bold transition-all"
+            @click="updateFilters({ topic: '' })"
+            :class="!catalogFilters.topic ? 'bg-[#AE0001] text-white shadow-lg' : 'theme-card theme-text-soft border theme-border'"
+            class="px-5 py-2 rounded-xl text-xs font-bold transition-all hover:scale-105"
           >
-            {{ topic }}
+            All Archives
+          </button>
+          <button 
+            v-for="genre in library.allGenres" 
+            :key="genre"
+            @click="updateFilters({ topic: genre })"
+            :class="catalogFilters.topic === genre ? 'bg-[#AE0001] text-white shadow-lg' : 'theme-card theme-text-soft border theme-border'"
+            class="px-5 py-2 rounded-xl text-xs font-bold transition-all hover:scale-105 flex items-center gap-2"
+          >
+            {{ genre }}
+            <span v-if="library.userPreferredGenres.includes(genre)" class="w-2 h-2 bg-[#EEBA30] rounded-full border border-black/20 shadow-sm" />
           </button>
         </div>
       </section>
@@ -253,23 +276,6 @@ const greeting = computed(() => {
 
         <!-- Bookstore / Book Grid -->
         <section class="space-y-12 relative">
-          <!-- Verification Overlay -->
-          <div v-if="!auth.isVerified" class="absolute inset-0 z-20 backdrop-blur-md bg-white/5 dark:bg-black/20 rounded-[2.5rem] flex flex-col items-center justify-center p-8 text-center border-2 border-dashed theme-border animate-fade-in">
-             <div class="p-6 bg-[#AE0001]/10 rounded-full mb-6">
-                <CheckCircle2 class="w-12 h-12 text-[#AE0001] opacity-50" />
-             </div>
-             <h3 class="text-2xl font-black theme-text font-cinzel mb-2 uppercase tracking-widest text-[#EEBA30]">Seal of Verification Required</h3>
-             <p class="text-sm theme-text-soft max-w-md mb-8 leading-relaxed">
-                To protect the sanctity of the ProLibris archive, we require all Seekers to verify their identity via parchment (email). 
-                Once verified, the full collection will be manifested for you.
-             </p>
-             <button 
-               @click="router.push('/verify-pending')"
-               class="px-8 py-4 bg-[#AE0001] text-white rounded-2xl font-black uppercase tracking-[0.2em] shadow-xl shadow-[#AE0001]/30 hover:scale-105 active:scale-95 transition-all text-xs"
-             >
-                Claim Verification
-             </button>
-          </div>
 
           <!-- Section Header -->
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-6 pr-2">
@@ -294,27 +300,27 @@ const greeting = computed(() => {
                <div class="h-px flex-1 bg-gradient-to-r from-transparent via-theme-border to-transparent opacity-30" />
             </div>
   
-            <div v-if="catalog.isLoading.value" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-6 lg:gap-8 animate-pulse">
+            <div v-if="isCatalogLoading" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-6 lg:gap-8 animate-pulse">
               <div v-for="i in 12" :key="i" class="aspect-[2/3] bg-black/5 dark:bg-white/5 rounded-2xl border theme-border" />
             </div>
             
-            <div v-else-if="!catalog.isLoading.value && (!catalog.books.value || catalog.books.value.length === 0)" class="text-center py-32 theme-card rounded-3xl border theme-border border-dashed">
+            <div v-else-if="!isCatalogLoading && (!catalogBooks || catalogBooks.length === 0)" class="text-center py-32 theme-card rounded-3xl border theme-border border-dashed">
               <Search class="w-16 h-16 mx-auto theme-text-soft opacity-20 mb-6" />
               <p class="text-2xl font-bold theme-text-soft opacity-60">No matching books found</p>
               <p class="text-sm theme-text-soft opacity-40 mt-2">Try adjusting your filters or search terms</p>
             </div>
             
             <div v-else class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4 lg:gap-5">
-              <BookCard v-for="book in catalog.books.value" :key="book?.$id || book?.id" :book="book" />
+              <BookCard v-for="book in catalogBooks" :key="book.$id" :book="book" />
             </div>
   
             <!-- Pagination -->
             <BookPagination 
-              v-if="catalog.totalPages.value > 1"
-              :current-page="catalog.currentPage.value"
-              :total-pages="catalog.totalPages.value"
-              :is-loading="catalog.isLoading.value"
-              @change-page="catalog.changePage"
+              v-if="totalPages > 1"
+              :current-page="currentPage"
+              :total-pages="totalPages"
+              :is-loading="isCatalogLoading"
+              @change-page="changePage"
             />
           </div>
         </section>
@@ -385,8 +391,8 @@ const greeting = computed(() => {
                      <button 
                        v-for="s in ['popular', 'descending', 'ascending']" 
                        :key="s"
-                       @click="catalog.updateFilters({ sort: s })"
-                       :class="catalog.filters.sort === s ? 'bg-[#AE0001] text-white shadow-lg shadow-[#AE0001]/20' : 'theme-card theme-text-soft border theme-border'"
+                       @click="updateFilters({ sort: s })"
+                       :class="catalogFilters.sort === s ? 'bg-[#AE0001] text-white shadow-lg shadow-[#AE0001]/20' : 'theme-card theme-text-soft border theme-border'"
                        class="px-4 py-3 rounded-xl text-xs font-bold capitalize transition-all"
                      >
                        {{ s === 'popular' ? 'Popularity' : s.replace('ing', '') + 'est' }}
@@ -400,8 +406,8 @@ const greeting = computed(() => {
                      <button 
                        v-for="topic in ['Fiction', 'History', 'Mystery', 'Science', 'Poetry', 'Philosophy', 'Art', 'Biography']"
                        :key="topic"
-                       @click="catalog.updateFilters({ topic: catalog.filters.topic === topic ? '' : topic })"
-                       :class="catalog.filters.topic === topic ? 'bg-[#AE0001] text-white' : 'theme-card theme-text-soft border theme-border'"
+                       @click="updateFilters({ topic: catalogFilters.topic === topic ? '' : topic })"
+                       :class="catalogFilters.topic === topic ? 'bg-[#AE0001] text-white' : 'theme-card theme-text-soft border theme-border'"
                        class="px-4 py-3 rounded-xl text-xs font-bold transition-all text-left"
                      >
                        {{ topic }}
@@ -427,7 +433,7 @@ const greeting = computed(() => {
       class="md:hidden fixed bottom-8 right-6 z-50 w-14 h-14 bg-[#AE0001] text-white rounded-2xl shadow-xl shadow-[#AE0001]/30 flex items-center justify-center transform active:scale-90 transition-transform"
     >
        <Filter class="w-6 h-6" />
-       <div v-if="catalog.filters.topic" class="absolute -top-1 -right-1 w-4 h-4 bg-white dark:bg-slate-900 text-[#EEBA30] text-[10px] font-black rounded-full border-2 border-[#AE0001] flex items-center justify-center">1</div>
+       <div v-if="catalogFilters.topic" class="absolute -top-1 -right-1 w-4 h-4 bg-white dark:bg-slate-900 text-[#EEBA30] text-[10px] font-black rounded-full border-2 border-[#AE0001] flex items-center justify-center">1</div>
     </button>
 
     <!-- ═══ Recent Tomes Portal Overlay ═══ -->
@@ -469,7 +475,7 @@ const greeting = computed(() => {
                            <span class="text-[10px] font-black uppercase tracking-widest text-[#EEBA30]">{{ formatDate(item.session.last_read_at) }}</span>
                         </div>
                         <h4 class="text-white font-bold text-lg mb-0.5 line-clamp-2 leading-tight">{{ item.book?.title }}</h4>
-                        <p class="text-white/40 text-sm font-medium line-clamp-2 mb-2">{{ item.book?.author }}</p>
+                        <p class="text-white/40 text-sm font-medium line-clamp-2 mb-2">Archival Tome</p>
                         
                         <div class="flex items-center gap-4">
                            <div class="flex items-center gap-1.5 px-3 py-1 bg-[#AE0001]/20 rounded-lg text-[10px] font-black text-[#AE0001] uppercase tracking-widest border border-[#AE0001]/30">

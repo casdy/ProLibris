@@ -136,7 +136,7 @@ const paragraphGroups = computed(() => {
         <p class="text-lg font-medium">No text to display for this chapter.</p>
       </div>
 
-      <div v-else>
+      <div v-else class="animate-typing-in">
         <p
           v-for="(group, gIdx) in paragraphGroups"
           :key="gIdx"
@@ -172,3 +172,59 @@ const paragraphGroups = computed(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+@keyframes typing-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-typing-in {
+  animation: typing-in 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.typing-char {
+  display: inline-block;
+  font-family: inherit;
+  font-size: 1.25rem;
+  position: relative;
+  transition: all 0.1s ease;
+}
+
+.typing-char--pending {
+  opacity: 0.3;
+}
+
+.typing-char--correct {
+  opacity: 1;
+  color: #f02e65;
+}
+
+.typing-char--error {
+  opacity: 1;
+  color: #AE0001;
+  background: rgba(174, 0, 1, 0.1);
+  border-radius: 2px;
+}
+
+.typing-char--active {
+  opacity: 1;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.typing-caret {
+  position: absolute;
+  left: 0;
+  bottom: -2px;
+  width: 100%;
+  height: 2px;
+  background: #f02e65;
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+</style>
