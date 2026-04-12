@@ -45,6 +45,8 @@ Desktop.ini
 
 # Development & Audit Scripts
 scripts/seed.ts
+scripts/seed-headless.ts
+scripts/count-books.ts
 scripts/migrate-schema.ts
 scripts/extract_owl.py
 scripts/auditDatabase.js
